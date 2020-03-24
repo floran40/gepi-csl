@@ -1,11 +1,9 @@
 <?php
 /*
  *
+ * $Id$
  *
- * Copyright 2010-2017 Josselin Jacquard, Stephane Boireau
- *
- * This file and the mod_abs2 module is distributed under GPL version 3, or
- * (at your option) any later version.
+ * Copyright 2001, 2007 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun, Christian Chapel
  *
  * This file is part of GEPI.
  *
@@ -26,296 +24,271 @@
 
 $niveau_arbo = 2;
 // Initialisations files
-include("../../lib/initialisationsPropel.inc.php");
 require_once("../../lib/initialisations.inc.php");
+//mes fonctions
+include("../lib/functions.php");
 
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-    header("Location: ../../utilisateurs/mon_compte.php?change_mdp=yes");
-    die();
+header("Location: ../../utilisateurs/mon_compte.php?change_mdp=yes");
+die();
 } else if ($resultat_session == '0') {
     header("Location: ../../logout.php?auto=1");
-    die();
-}
-
+die();
+};
 // Check access
 if (!checkAccess()) {
     header("Location: ../../logout.php?auto=1");
-    die();
+die();
 }
+$msg = '';
 
-//debug_var();
+function securite_texte($str)
+ {
+     $str = str_replace(array('<script','</script>','<?','?>','<?php'), array('','','','',''), $str);
+     return $str;
+ }
 
-if(!acces_consultation_admin_abs2("/mod_abs2/admin/admin_motifs_absences.php")) {
-	header("Location: ../../accueil.php?msg=Accès non autorisé");
-	die();
-}
-
-$acces_saisie_admin_abs2=acces_saisie_admin_abs2("/mod_abs2/admin/admin_motifs_absences.php");
-
-if (empty($_GET['action']) and empty($_POST['action'])) { $action="";}
+if (empty($_GET['action_sql']) and empty($_POST['action_sql'])) {$action_sql="";}
+    else { if (isset($_GET['action_sql'])) {$action_sql=$_GET['action_sql'];} if (isset($_POST['action_sql'])) {$action_sql=$_POST['action_sql'];} }
+if (empty($_GET['action']) and empty($_POST['action'])) {exit();}
     else { if (isset($_GET['action'])) {$action=$_GET['action'];} if (isset($_POST['action'])) {$action=$_POST['action'];} }
 if (empty($_GET['id_motif']) and empty($_POST['id_motif'])) { $id_motif="";}
     else { if (isset($_GET['id_motif'])) {$id_motif=$_GET['id_motif'];} if (isset($_POST['id_motif'])) {$id_motif=$_POST['id_motif'];} }
-if (empty($_GET['nom_motif']) and empty($_POST['nom_motif'])) { $nom_motif=""; }
-    else { if (isset($_GET['nom_motif'])) {$nom_motif=$_GET['nom_motif'];} if (isset($_POST['nom_motif'])) {$nom_motif=$_POST['nom_motif'];} }
-if (empty($_GET['com_motif']) and empty($_POST['com_motif'])) { $com_motif="";}
-    else { if (isset($_GET['com_motif'])) {$com_motif=$_GET['com_motif'];} if (isset($_POST['com_motif'])) {$com_motif=$_POST['com_motif'];} }
-if (empty($_GET['valable_motif']) and empty($_POST['valable_motif'])) { $valable_motif="y";}
-    else { if (isset($_GET['valable_motif'])) {$valable_motif=$_GET['valable_motif'];} if (isset($_POST['valable_motif'])) {$valable_motif=$_POST['valable_motif'];} }
+if (empty($_GET['nb_ajout']) and empty($_POST['nb_ajout'])) { $nb_ajout="1";}
+    else { if (isset($_GET['nb_ajout'])) {$nb_ajout=$_GET['nb_ajout'];} if (isset($_POST['nb_ajout'])) {$nb_ajout=$_POST['nb_ajout'];} }
+if (empty($_GET['init_motif_absence']) and empty($_POST['init_motif_absence'])) { $init_motif_absence=""; }
+    else { if (isset($_GET['init_motif_absence'])) {$init_motif_absence=$_GET['init_motif_absence'];} if (isset($_POST['init_motif_absence'])) {$init_motif_absence=$_POST['init_motif_absence'];} }
+if (empty($_GET['def_motif_absence']) and empty($_POST['def_motif_absence'])) { $def_motif_absence="";}
+    else { if (isset($_GET['def_motif_absence'])) {$def_motif_absence=$_GET['def_motif_absence'];} if (isset($_POST['def_motif_absence'])) {$def_motif_absence=$_POST['def_motif_absence'];} }
 
-include("function.php");
+$total = 0;
+$verification[0] = 1;
+$erreur = 0;
+$remarque = 0;
 
-if(((($action!="")&&($action!="visualiser"))||($nom_motif!="")||(isset($_GET['corriger'])))&&
-(!$acces_saisie_admin_abs2)) {
-	//debug_var();
-	header("Location: ../../accueil.php?msg=Saisie non autorisée");
-	die();
+if ($action_sql == "ajouter" or $action_sql == "modifier")
+{
+   while ($total < $nb_ajout)
+      {
+            // Vérifcation des variable
+              $init_motif_absence_ins = $_POST['init_motif_absence'][$total];
+              $def_motif_absence_ins = securite_texte($_POST['def_motif_absence'][$total]);
+
+              if ($action_sql == "modifier") { $id_motif_absence_ins = $_POST['id_motif'][$total]; }
+
+            // Vérification des champs nom et prenom (si il ne sont pas vides ?)
+            if($init_motif_absence_ins != "" && $def_motif_absence_ins != "")
+            {
+                 if($action_sql == "ajouter") { $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM absences_motifs WHERE init_motif_absence = '".$init_motif_absence_ins."'"),0); }
+                 if($action_sql == "modifier") { $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM absences_motifs WHERE id_motif_absence != '".$id_motif_absence_ins."' AND init_motif_absence = '".$init_motif_absence_ins."'"),0); }
+                 if ($test == "0")
+                  {
+                     if($action_sql == "ajouter")
+                      {
+                            // Requete d'insertion MYSQL
+                             $requete = "INSERT INTO absences_motifs (init_motif_absence,def_motif_absence) VALUES ('$init_motif_absence_ins','$def_motif_absence_ins')";
+                      }
+                     if($action_sql == "modifier")
+                      {
+                            // Requete de mise à jour MYSQL
+                              $requete = "UPDATE absences_motifs SET
+                                                  init_motif_absence = '$init_motif_absence_ins',
+                                                  def_motif_absence = '$def_motif_absence_ins'
+                                                  WHERE id_motif_absence = '".$id_motif_absence_ins."' ";
+                      }
+                            // Execution de cette requete dans la base cartouche
+                             mysqli_query($GLOBALS["mysqli"], $requete) or die('Erreur SQL !'.$sql.'<br />'.mysqli_error($GLOBALS["mysqli"]));
+                             $verification[$total] = 1;
+                    } else {
+                               // vérification = 2 - C'est initiale pour les motif existe déjas
+                                 $verification[$total] = 2;
+                                 $erreur = 1;
+                            }
+            } else {
+                     // vérification = 3 - Tous les champs ne sont pas remplie
+                     $verification[$total] = 3;
+                     $erreur = 1;
+                   }
+      $total = $total + 1;
+      }
+
+      if($erreur == 0)
+       {
+          $action = "visualiser";
+       } else {
+                 $o = 0;
+                 $n = 0;
+                 while ($o < $nb_ajout)
+                  {
+                    if($verification[$o] != 1)
+                     {
+                        $init_motif_absence_erreur[$n] = $init_motif_absence[$o];
+                        $def_motif_absence_erreur[$n] = $def_motif_absence[$o];
+                        $verification_erreur[$n] = $verification[$o];
+                        if ($action_sql == "modifier") { $id_definie_motif_erreur[$n] = $id_motif[$o]; }
+                        $n = $n + 1;
+                     }
+                     $o = $o + 1;
+                  }
+                  $nb_ajout = $n;
+                  if ($action_sql == "ajouter") { $action = "ajouter"; }
+                if ($action_sql == "modifier") { $action = "modifier"; }
+              }
 }
-else {
-	$motif = AbsenceEleveMotifQuery::create()->findPk($id_motif);
-	if ($action == 'supprimer') {
-		check_token();
-	    if ($motif != null) {
-		$motif->delete();
-	    }
-	} elseif ($action == "monter") {
-		check_token();
-	    if ($motif != null) {
-		$motif->moveUp();
-	    }
-	} elseif ($action == 'descendre') {
-		check_token();
-	    if ($motif != null) {
-		$motif->moveDown();
-	    }
-	} elseif ($action == 'ajouterdefaut') {
-		check_token();
-	    //include("function.php");
-	    ajoutMotifsParDefaut();
-	} else {
-	    if ($nom_motif != '') {
-			check_token();
-			$motif = AbsenceEleveMotifQuery::create()->findPk($id_motif);
-			if ($motif == null) {
-				$motif = new AbsenceEleveMotif();
-			}
-			$motif->setNom(stripslashes($nom_motif));
-			$motif->setCommentaire(stripslashes($com_motif));
-			$motif->save();
 
-			$id_motif=$motif->getId();
+if ($action_sql == "supprimer") {
+      $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM absences_motifs, absences_eleves
+      WHERE absences_eleves.motif_absence_eleve = absences_motifs.init_motif_absence
+      and id_motif_absence ='".$id_motif."'"),0);
+      if ($test == "0")
+      {
+         //Requete de suppresion MYSQL
+            $requete = "DELETE FROM absences_motifs WHERE id_motif_absence ='$id_motif'";
+         // Execution de cette requete
+            mysqli_query($GLOBALS["mysqli"], $requete) or die('Erreur SQL !'.$requete.'<br />'.mysqli_error($GLOBALS["mysqli"]));
+            $msg = "La suppresion a été effectuée avec succès.";
+      } else {
+          $msg = "Suppression impossible car une ou plusieurs absences ont été enregistrées avec ce type de motif. Commencez par supprimer les absences concernées";
+      }
 
-			// Il faudrait modifier le modèle ORM... mais je ne sais pas faire.
-			$sql="UPDATE a_motifs SET valable='".$valable_motif."' WHERE id='".$id_motif."';";
-			//echo "$sql<br />";
-			$res=mysqli_query($GLOBALS['mysqli'], $sql);
-	    }
-	}
-
-	if(isset($_GET['corriger'])) {
-		check_token();
-
-		$table="a_motifs";
-
-		$sql="SELECT * FROM $table ORDER BY sortable_rank, nom;";
-		//echo "$sql<br />";
-		$res=mysqli_query($GLOBALS["mysqli"], $sql);
-		$cpt=1;
-		while($lig=mysqli_fetch_object($res)) {
-			$sql="UPDATE $table SET sortable_rank='$cpt' WHERE id='$lig->id';";
-			//echo "$sql<br />";
-			$update=mysqli_query($GLOBALS["mysqli"], $sql);
-			if(!$update) {
-				$msg="Erreur lors de la correction des rangs.<br />";
-				break;
-			}
-			$cpt++;
-		}
-		$msg="Correction effectuée.<br />";
-	}
 }
-//==========================================
+
+if ($action == "modifier")
+ {
+      $requete_modif_motif = 'SELECT * FROM absences_motifs WHERE id_motif_absence="'.$id_motif.'"';
+      $resultat_modif_motif = mysqli_query($GLOBALS["mysqli"], $requete_modif_motif) or die('Erreur SQL !'.$requete_modif_motif.'<br />'.mysqli_error($GLOBALS["mysqli"]));
+      $data_modif_motif = mysqli_fetch_array($resultat_modif_motif);
+ }
+
 // header
 $titre_page = "Gestion des motifs d'absence";
 require_once("../../lib/header.inc.php");
-//==========================================
 
 echo "<p class=bold>";
-echo "<a href=\"index.php";
-if($_SESSION['statut']!="administrateur") {
-	echo "#config_avancee";
-}
-echo "\">";
+if ($action=="modifier" OR $action=="ajouter") {
+	echo "<a href=\"admin_motifs_absences.php?action=visualiser\">";
+} elseif ($action=="visualiser") {
+	echo "<a href=\"index.php\">";
+} 
 echo "<img src='../../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a>";
 echo "</p>";
-?>
 
+?>
+<?php if ($action == "visualiser") { ?>
+<?php /* div de centrage du tableau pour ie5 */ ?>
 <div style="text-align:center">
     <h2>Définition des motifs d'absence</h2>
-<?php 
-if($acces_saisie_admin_abs2) {
-	if ($action == "ajouter" OR $action == "modifier") { ?>
-<div style="text-align:center">
-    <?php
-    	if($action=="ajouter") { 
-	    echo "<h2>Ajout d'un motif</h2>";
-	} elseif ($action=="modifier") {
-	    echo "<h2>Modifier un motif</h2>";
-	}
-	?>
-
-    <form action="admin_motifs_absences.php" method="post" name="form2" id="form2">
-<?php
-echo add_token_field();
-?>
-     <fieldset>
-      <table cellpadding="2" cellspacing="2" class="menu">
-        <tr>
-          <td>Nom (obligatoire)</td>
-          <td colspan="2">Commentaire (facultatif)</td>
-          <td>Motif valable ou non (obligatoire)</td>
-        </tr>
-        <tr>
-          <td>
-           <?php
-           $motif = AbsenceEleveMotifQuery::create()->findPk($id_motif);
-	   if ($motif != null) { ?>
-	      <input name="id_motif" type="hidden" id="id_motif" value="<?php echo $id_motif ?>" />
-	   <?php } ?>
-	      <input name="nom_motif" type="text" id="nom_motif" size="15" maxlength="15" value="<?php  if ($motif != null) {echo $motif->getNom();} ?>"/>
-           </td>
-           <td colspan="2">
-	       <input name="com_motif" type="text" id="com_motif" size="40" value="<?php  if ($motif != null) {echo $motif->getCommentaire();} ?>"/>
-           </td>
-           <td colspan="2">
-             <?php
-                 $checked_valable=" checked";
-                 $checked_non_valable="";
-                 if ($motif != null) {
-                     // Il faudrait modifier le modèle ORM... mais je ne sais pas faire.
-                     $sql="SELECT * FROM a_motifs WHERE id='".$id_motif."'";
-                     $res=mysqli_query($GLOBALS['mysqli'], $sql);
-                     if(mysqli_num_rows($res)==0) {
-                         $checked_valable=" checked";
-                         $checked_non_valable="";
-                     }
-                     else {
-                         $lig=mysqli_fetch_object($res);
-                         if($lig->valable=="y") {
-                             $checked_valable=" checked";
-                             $checked_non_valable="";
-                         }
-                         else {
-                             $checked_valable="";
-                             $checked_non_valable=" checked";
-                         }
-                     }
-                 }
-             ?>
-	       <input name="valable_motif" type="radio" id="valable_motif_y" size="40" value="y"<?php echo $checked_valable;?> /><label for='valable_motif_y'>Valable</label><br />
-	       <input name="valable_motif" type="radio" id="valable_motif_n" size="40" value="n"<?php echo $checked_non_valable;?> /><label for='valable_motif_n'>Non valable</label><br />
-           </td>
-        </tr>
-      </table>
-     </fieldset>
-     <input type="submit" name="Submit" value="Enregistrer" />
-    </form>
-<br/><br/>
-<?php /* fin du div de centrage du tableau pour ie5 */ ?>
-</div>
-<?php }  ?>
-
-	<a href="admin_motifs_absences.php?action=ajouter"><img src='../../images/icons/add.png' alt='' class='back_link' /> Ajouter un motif</a>
+	<a href="admin_motifs_absences.php?action=ajouter"><img src='../../images/icons/add.png' alt='' class='back_link' /> Ajouter un ou plusieurs motif(s)</a>
 	<br/><br/>
-	<a href="admin_motifs_absences.php?action=ajouterdefaut<?php echo add_token_in_url();?>"><img src='../../images/icons/add.png' alt='' class='back_link' /> Ajouter les motifs par défaut</a>
-<?php
-}
-?>
-	<br/><br/>
-    <table cellpadding="0" cellspacing="1" class="menu">
+    <table cellpadding="0" cellspacing="1" class="tab_table">
       <tr>
-        <td>Id</td>
-        <td>Nom</td>
-        <td>Commentaire</td>
-        <td style="width: 25px;">Valable</td>
-        <td title="Nombre de saisies/traitements avec ce motif.">Effectif</td>
-<?php 
-if($acces_saisie_admin_abs2) {
-?>
-        <td style="width: 25px;"></td>
-        <td style="width: 25px;"></td>
-        <td style="width: 25px;"></td>
-        <td style="width: 25px;"></td>
-        <td style="width: 25px;"></td>
-<?php 
-}
-?>
+        <td class="tab_th">Code</td>
+        <td class="tab_th">Définition</td>
+        <td class="tab_th" style="width: 25px;"></td>
+        <td class="tab_th" style="width: 25px;"></td>
       </tr>
     <?php
-	// A FAIRE AVEC PROPEL ORM dans l'objet AbsenceEleveMotif, mais je ne sais pas faire
-	$tab_a_motifs=array();
-	$sql="SELECT * FROM a_motifs;";
-	$res_a_motifs=mysqli_query($GLOBALS['mysqli'], $sql);
-	if(mysqli_num_rows($res_a_motifs)>0) {
-		while($lig_a_motif=mysqli_fetch_assoc($res_a_motifs)) {
-			$tab_a_motifs[$lig_a_motif["id"]]=$lig_a_motif;
-		}
-	}
-
-    $motif_collection = new PropelCollection();
-    $motif_collection = AbsenceEleveMotifQuery::create()->findList();
-    $motif = new AbsenceEleveMotif();
+    $requete_motif = 'SELECT * FROM absences_motifs WHERE init_motif_absence !="DI" AND init_motif_absence !="IN" ORDER BY init_motif_absence ASC';
+    $execution_motif = mysqli_query($GLOBALS["mysqli"], $requete_motif) or die('Erreur SQL !'.$requete_motif.'<br>'.mysqli_error($GLOBALS["mysqli"]));
     $i = '1';
-    foreach ($motif_collection as $motif) { ?>
-        <tr onmouseover="this.style.backgroundColor='white';" onmouseout="this.style.backgroundColor='';">
-	  <td><?php echo $motif->getId(); ?></td>
-	  <td><?php echo $motif->getNom(); ?></td>
-	  <td><?php echo $motif->getCommentaire(); ?></td>
-	  <td><?php 
-		if(isset($tab_a_motifs[$motif->getId()])) {
-			if($tab_a_motifs[$motif->getId()]["valable"]=="y") {
-				echo "<img src='$gepiPath/images/enabled.png' class='icone16' alt='Y' title=\"Motif valable\" />";
-			}
-			else {
-				echo "<img src='$gepiPath/images/disabled.png' class='icone16' alt='N' title=\"Motif non valable\" />";
-			}
-		}
-		else {
-			echo "<img src='$gepiPath/images/icons/ico_question.png' class='icone16' alt='?' title=\"???\" />";
-		}
-		?></td>
-<?php 
-	$nb_saisies_traitements_avec_ce_motif=abs2_nombre_de_saisies_avec_tel_motif($motif->getId());
-	echo "
-	<td title=\"$nb_saisies_traitements_avec_ce_motif saisies/traitements ont ce motif\">".$nb_saisies_traitements_avec_ce_motif."</td>";
-if($acces_saisie_admin_abs2) {
-?>
-          <td><a href="admin_motifs_absences.php?action=modifier&amp;id_motif=<?php echo $motif->getId(); echo add_token_in_url();?>"><img src="../../images/icons/configure.png" title="Modifier" border="0" alt="" /></a></td>
-
-          <td>
-          <?php
-          	if(($nb_saisies_traitements_avec_ce_motif==0)||($_SESSION['statut']=="administrateur")) {
-          ?>
-               <a href="admin_motifs_absences.php?action=supprimer&amp;id_motif=<?php echo $motif->getId(); echo add_token_in_url();?>" onClick="return confirm('Etes-vous sûr de vouloir supprimer ce motif ?')"><img src="../../images/icons/delete.png" width="22" height="22" title="Supprimer" border="0" alt="" /></a>
-          <?php
-          	}
-          ?>
-          </td>
-
-          <td><a href="admin_motifs_absences.php?action=monter&amp;id_motif=<?php echo $motif->getId(); echo add_token_in_url();?>"><img src="../../images/up.png" width="22" height="22" title="monter" border="0" alt="" /></a></td>
-          <td><a href="admin_motifs_absences.php?action=descendre&amp;id_motif=<?php echo $motif->getId(); echo add_token_in_url();?>"><img src="../../images/down.png" width="22" height="22" title="descendre" border="0" alt="" /></a></td>
+    while ( $data_motif = mysqli_fetch_array( $execution_motif ) ) {
+       if ($i === '1') { $couleur_cellule = 'couleur_ligne_1'; $i = '2'; } else { $couleur_cellule = 'couleur_ligne_2'; $i = '1'; } ?>
+        <tr class="<?php echo $couleur_cellule; ?>">
+          <td><?php echo $data_motif['init_motif_absence']; ?></td>
+          <td><?php echo $data_motif['def_motif_absence']; ?></td>
+          <td><a href="admin_motifs_absences.php?action=modifier&amp;id_motif=<?php echo $data_motif['id_motif_absence']; ?>"><img src="../../images/icons/configure.png" title="Modifier" border="0" alt="" /></a></td>
+          <td><?php if ( $data_motif['init_motif_absence'] != 'A' ) { ?><a href="admin_motifs_absences.php?action=visualiser&amp;action_sql=supprimer&amp;id_motif=<?php echo $data_motif['id_motif_absence']; ?>" onClick="return confirm('Etes-vous sûr de vouloir supprimer ce motif ?')"><img src="../images/x2.png" width="22" height="22" title="Supprimer" border="0" alt="" /></a><?php } ?></td>
         </tr>
-<?php 
-}
-?>
      <?php } ?>
     </table>
     <br/><br/>
+<?php /* fin du div de centrage du tableau pour ie5 */ ?>
 </div>
+<?php } ?>
 
+<?php if ($action == "ajouter" OR $action == "modifier") { ?>
+<div style="text-align:center">
+    <?php
+    	if($action=="ajouter") { 
+    		echo "<h2>Ajout d'un ou plusieurs motif(s)</h2>";
+		} elseif ($action=="modifier") {
+			echo "<h2>Modifier un motif</h2>";
+		}
+	?>
+
+  <?php if ($action == "ajouter") { ?>
+
+    <form method="post" action="admin_motifs_absences.php?action=ajouter" name="form1" id="form1">
+     <fieldset class="fieldset_efface">
+      <table cellpadding="2" cellspacing="2" class="tab_table">
+        <tr>
+          <th class="tab_th">Nombre de motifs à ajouter</th>
+        </tr>
+        <tr style="text-align: right;">
+          <td class="couleur_ligne_1"><input name="nb_ajout" type="text" size="5" maxlength="5" value="<?php if(isset($nb_ajout)) { echo $nb_ajout; } else { ?>1<?php } ?>" class="input_sans_bord" />&nbsp;&nbsp;&nbsp;<input type="submit" name="Submit2" value="Mettre à jour" /></td>
+        </tr>
+      </table>
+     </fieldset>
+    </form>
+  <?php } ?>
+
+    <form action="admin_motifs_absences.php?action=visualiser&amp;action_sql=<?php if($action=="ajouter") { ?>ajouter<?php } if($action=="modifier") { ?>modifier<?php } ?>" method="post" name="form2" id="form2">
+     <fieldset class="fieldset_efface">
+      <table cellpadding="2" cellspacing="2" class="tab_table">
+        <tr>
+          <td class="tab_th">Code</td>
+          <td colspan="2" class="tab_th">Description</td>
+        </tr>
+        <?php
+        $i = '1';
+        $nb = '0';
+        while($nb < $nb_ajout) {
+	       if ($i === '1') { $couleur_cellule = 'couleur_ligne_1'; $i = '2'; } else { $couleur_cellule = 'couleur_ligne_2'; $i = '1'; } ?>
+        <?php if (isset($verification_erreur[$nb]) and $verification_erreur[$nb] != 1) { ?>
+         <tr>
+        <td class="centre"><img src="../images/attention.png" width="28" height="28" alt="" /></td>
+          <td colspan="2" class="erreur_rouge_jaune"><b>- Erreur -<br />
+          <?php if ($verification_erreur[$nb] === 2) { ?>Cette initiale pour le motif existe déjà<?php } ?>
+          <?php if ($verification_erreur[$nb] === 3) { ?>Tous les champs ne sont pas remplis<?php } ?>
+          </b><br /></td>
+         </tr>
+        <?php } ?>
+        <tr class="<?php echo $couleur_cellule; ?>">
+          <td>
+           <?php
+           if($action==='modifier') {
+               $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM absences_eleves WHERE absences_eleves.motif_absence_eleve = '".$data_modif_motif['init_motif_absence']."'"),0);
+               if ($test != '0') {
+                   ?><input name="init_motif_absence[<?php echo $nb; ?>]" type="hidden" id="init_motif_absence" size="2" maxlength="2" value="<?php if($action=="modifier") { echo $data_modif_motif['init_motif_absence']; } elseif (isset($init_motif_absence_erreur[$nb])) { echo $init_motif_absence_erreur[$nb]; } ?>" /><?php if($action=="modifier") { echo $data_modif_motif['init_motif_absence']; } elseif (isset($init_motif_absence_erreur[$nb])) { echo $init_motif_absence_erreur[$nb]; } ?><?php
+               } else {
+                   ?><input name="init_motif_absence[<?php echo $nb; ?>]" type="text" id="init_motif_absence" size="2" maxlength="2" value="<?php if($action=="modifier") { echo $data_modif_motif['init_motif_absence']; } elseif (isset($init_motif_absence_erreur[$nb])) { echo $init_motif_absence_erreur[$nb]; } ?>" class="input_sans_bord" /><?php
+               }
+           } else {
+               ?><input name="init_motif_absence[<?php echo $nb; ?>]" type="text" id="init_motif_absence" size="2" maxlength="2" value="<?php if($action=="modifier") { echo $data_modif_motif['init_motif_absence']; } elseif (isset($init_motif_absence_erreur[$nb])) { echo $init_motif_absence_erreur[$nb]; } ?>" class="input_sans_bord" /><?php
+           }
+
+            ?>
+           </td>
+           <td colspan="2">
+              <input name="def_motif_absence[<?php echo $nb; ?>]" type="text" id="def_motif_absence" size="40" maxlength="200" value="<?php if($action=="modifier") { echo $data_modif_motif['def_motif_absence']; } elseif (isset($def_motif_absence_erreur[$nb])) { echo $def_motif_absence_erreur[$nb]; } else { ?><?php } ?>" class="input_sans_bord" />
+           </td>
+        </tr>
+            <?php if($action==='modifier') { ?>
+              <input type="hidden" name="id_motif[<?php echo $nb; ?>]" value="<?php if (isset($id_definie_motif_erreur[$nb])) { echo $id_definie_motif_erreur[$nb]; } else { echo $id_motif; } ?>" />
+            <?php } ?>
+        <?php $nb = $nb + 1; } ?>
+      </table>
+     </fieldset>
+     <input type="hidden" name="nb_ajout" value="<?php echo $nb_ajout; ?>" />
+     <input type="submit" name="Submit" value="Enregistrer" />
+    </form>
+<?php /* fin du div de centrage du tableau pour ie5 */ ?>
+</div>
 <?php
-	echo check_sortable_rank_trouble('a_motifs', 'motifs');
-	require("../../lib/footer.inc.php");
+} 
+
+require("../../lib/footer.inc.php");
+
 ?>

@@ -1,8 +1,9 @@
 <?php
 /*
  *
+ * $Id$
  *
- * Copyright 2001, 2010 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun, Christian Chapel, Pascal Fautrero
+ * Copyright 2001, 2007 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun, Christian Chapel
  *
  * This file is part of GEPI.
  *
@@ -21,57 +22,53 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-$niveau_arbo = 1;
+$niveau_arbo = 2;
 // Initialisations files
-require_once("../lib/initialisations.inc.php");
-//mes fonctions
-include("./fonctions_edt.php");
-include("./fonctions_calendrier.php");
+require_once("../../lib/initialisations.inc.php");
+//les fonctions spécifiques
+include("../lib/functions.php");
+include("../../edt_organisation/fonctions_calendrier.php");
+
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-    header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+    header("Location: ../../utilisateurs/mon_compte.php?change_mdp=yes");
     die();
 } else if ($resultat_session == '0') {
-    header("Location: ../logout.php?auto=1");
+    header("Location: ../../logout.php?auto=1");
     die();
 };
 
 // Check access
 if (!checkAccess()) {
-    header("Location: ../logout.php?auto=1");
+    header("Location: ../../logout.php?auto=1");
     die();
 }
+// header
+$titre_page = "Définition des créneaux horaires";
+require_once("../../lib/header.inc.php");
 
-//debug_var();
-
-if (empty($_GET['action_sql']) and empty($_POST['action_sql'])) {$action_sql="";}
-   else { if (isset($_GET['action_sql'])) {$action_sql=$_GET['action_sql'];} if (isset($_POST['action_sql'])) {$action_sql=$_POST['action_sql'];} }
-if (empty($_GET['action']) and empty($_POST['action'])) {exit();}
-   else { if (isset($_GET['action'])) {$action=$_GET['action'];} if (isset($_POST['action'])) {$action=$_POST['action'];} }
-if (empty($_GET['id_periode']) and empty($_POST['id_periode'])) { $id_periode="";}
-   else { if (isset($_GET['id_periode'])) {$id_periode=$_GET['id_periode'];} if (isset($_POST['id_periode'])) {$id_periode=$_POST['id_periode'];} }
-if (empty($_GET['nb_ajout']) and empty($_POST['nb_ajout'])) { $nb_ajout="1";}
-   else { if (isset($_GET['nb_ajout'])) {$nb_ajout=$_GET['nb_ajout'];} if (isset($_POST['nb_ajout'])) {$nb_ajout=$_POST['nb_ajout'];} }
-if (empty($_GET['nom_definie_periode']) and empty($_POST['nom_definie_periode'])) { $nom_definie_periode=""; }
-   else { if (isset($_GET['nom_definie_periode'])) {$nom_definie_periode=$_GET['nom_definie_periode'];} if (isset($_POST['nom_definie_periode'])) {$nom_definie_periode=$_POST['nom_definie_periode'];} }
-if (empty($_GET['heuredebut_definie_periode']) and empty($_POST['heuredebut_definie_periode'])) { $heuredebut_definie_periode="";}
-   else { if (isset($_GET['heuredebut_definie_periode'])) {$heuredebut_definie_periode=$_GET['heuredebut_definie_periode'];} if (isset($_POST['heuredebut_definie_periode'])) {$heuredebut_definie_periode=$_POST['heuredebut_definie_periode'];} }
-if (empty($_GET['heurefin_definie_periode']) and empty($_POST['heurefin_definie_periode'])) { $heurefin_definie_periode="";}
-   else { if (isset($_GET['heurefin_definie_periode'])) {$heurefin_definie_periode=$_GET['heurefin_definie_periode'];} if (isset($_POST['heurefin_definie_periode'])) {$heurefin_definie_periode=$_POST['heurefin_definie_periode'];} }
-if (empty($_GET['suivi_definie_periode']) and empty($_POST['suivi_definie_periode'])) { $suivi_definie_periode = ''; }
-   else { if (isset($_GET['suivi_definie_periode'])) { $suivi_definie_periode = $_GET['suivi_definie_periode']; } if (isset($_POST['suivi_definie_periode'])) { $suivi_definie_periode = $_POST['suivi_definie_periode']; } }
-if (empty($_GET['type_creneaux']) and empty($_POST['type_creneaux'])) { $type_creneaux = ''; }
-   else { if (isset($_GET['type_creneaux'])) { $type_creneaux = $_GET['type_creneaux']; } if (isset($_POST['type_creneaux'])) { $type_creneaux = $_POST['type_creneaux']; } }
+	if (empty($_GET['action_sql']) and empty($_POST['action_sql'])) {$action_sql="";}
+	   else { if (isset($_GET['action_sql'])) {$action_sql=$_GET['action_sql'];} if (isset($_POST['action_sql'])) {$action_sql=$_POST['action_sql'];} }
+	if (empty($_GET['action']) and empty($_POST['action'])) {exit();}
+	   else { if (isset($_GET['action'])) {$action=$_GET['action'];} if (isset($_POST['action'])) {$action=$_POST['action'];} }
+	if (empty($_GET['id_periode']) and empty($_POST['id_periode'])) { $id_periode="";}
+	   else { if (isset($_GET['id_periode'])) {$id_periode=$_GET['id_periode'];} if (isset($_POST['id_periode'])) {$id_periode=$_POST['id_periode'];} }
+	if (empty($_GET['nb_ajout']) and empty($_POST['nb_ajout'])) { $nb_ajout="1";}
+	   else { if (isset($_GET['nb_ajout'])) {$nb_ajout=$_GET['nb_ajout'];} if (isset($_POST['nb_ajout'])) {$nb_ajout=$_POST['nb_ajout'];} }
+	if (empty($_GET['nom_definie_periode']) and empty($_POST['nom_definie_periode'])) { $nom_definie_periode=""; }
+	   else { if (isset($_GET['nom_definie_periode'])) {$nom_definie_periode=$_GET['nom_definie_periode'];} if (isset($_POST['nom_definie_periode'])) {$nom_definie_periode=$_POST['nom_definie_periode'];} }
+	if (empty($_GET['heuredebut_definie_periode']) and empty($_POST['heuredebut_definie_periode'])) { $heuredebut_definie_periode="";}
+	   else { if (isset($_GET['heuredebut_definie_periode'])) {$heuredebut_definie_periode=$_GET['heuredebut_definie_periode'];} if (isset($_POST['heuredebut_definie_periode'])) {$heuredebut_definie_periode=$_POST['heuredebut_definie_periode'];} }
+	if (empty($_GET['heurefin_definie_periode']) and empty($_POST['heurefin_definie_periode'])) { $heurefin_definie_periode="";}
+	   else { if (isset($_GET['heurefin_definie_periode'])) {$heurefin_definie_periode=$_GET['heurefin_definie_periode'];} if (isset($_POST['heurefin_definie_periode'])) {$heurefin_definie_periode=$_POST['heurefin_definie_periode'];} }
+	if (empty($_GET['suivi_definie_periode']) and empty($_POST['suivi_definie_periode'])) { $suivi_definie_periode = ''; }
+	   else { if (isset($_GET['suivi_definie_periode'])) { $suivi_definie_periode = $_GET['suivi_definie_periode']; } if (isset($_POST['suivi_definie_periode'])) { $suivi_definie_periode = $_POST['suivi_definie_periode']; } }
+	if (empty($_GET['type_creneaux']) and empty($_POST['type_creneaux'])) { $type_creneaux = ''; }
+	   else { if (isset($_GET['type_creneaux'])) { $type_creneaux = $_GET['type_creneaux']; } if (isset($_POST['type_creneaux'])) { $type_creneaux = $_POST['type_creneaux']; } }
 
 $jour_semaine = isset($_POST["jour_semaine"]) ? $_POST["jour_semaine"] : NULL;
 $demande_jour_semaine = isset($_POST["demande_jour_semaine"]) ? $_POST["demande_jour_semaine"] : NULL;
-// header
-$titre_page = "Définition des créneaux horaires";
-$style_specifique = "templates/".NameTemplateEdt()."/css/style_edt";
-require_once("../lib/header.inc.php");
-
-
 
 // on prévoit de passer systématiquement vers les créneaux du jour différent si $cren est initialisé
 // Dans ce cas, on appelle edt_creneaux_bis
@@ -150,7 +147,7 @@ if ($action_sql == "ajouter" or $action_sql == "modifier") {
 							mysqli_query($GLOBALS["mysqli"], $requete) or die('Erreur SQL !'.$sql.'<br />'.mysqli_error($GLOBALS["mysqli"]));
 							$verification[$total] = 1;
 						} else {
-							// vérification = 2 - Ce créneau horaire existe déjà
+							// vérification = 2 - Ce créneaux horaires existe déjas
 							$verification[$total] = 2;
 							$erreur = 1;
 						}
@@ -170,7 +167,7 @@ if ($action_sql == "ajouter" or $action_sql == "modifier") {
 				$erreur = 1;
 			}
 		} else {
-			// vérification = 3 - Tous les champs ne sont pas remplis
+			// vérification = 3 - Tous les champs ne sont pas remplie
 			$verification[$total] = 3;
 			$erreur = 1;
 		}
@@ -210,52 +207,40 @@ if ($action_sql == "ajouter" or $action_sql == "modifier") {
 
 if ($action_sql == "supprimer") {
 	//Requete d'insertion MYSQL
-	if(is_array($id_periode)) {
-		$requete = "DELETE FROM ".$prefix_base."edt_creneaux".$choix_table." WHERE id_definie_periode ='".$id_periode[0]."'";
-	}
-	else {
-		$requete = "DELETE FROM ".$prefix_base."edt_creneaux".$choix_table." WHERE id_definie_periode ='$id_periode'";
-	}
+	$requete = "DELETE FROM ".$prefix_base."edt_creneaux".$choix_table." WHERE id_definie_periode ='$id_periode'";
 	// Execution de cette requete
 	mysqli_query($GLOBALS["mysqli"], $requete) or die('Erreur SQL !'.$requete.'<br />'.mysqli_error($GLOBALS["mysqli"]));
 }
 
 if ($action == "modifier") {
-	if(is_array($id_periode)) {
-		$requete_modif_periode = 'SELECT * FROM '.$prefix_base.'edt_creneaux'.$choix_table.' WHERE id_definie_periode="'.$id_periode[0].'";';
-	}
-	else {
-		$requete_modif_periode = 'SELECT * FROM '.$prefix_base.'edt_creneaux'.$choix_table.' WHERE id_definie_periode="'.$id_periode.'";';
-	}
-	//echo "$requete_modif_periode<br />";
+	$requete_modif_periode = 'SELECT * FROM '.$prefix_base.'edt_creneaux'.$choix_table.' WHERE id_definie_periode="'.$id_periode.'"';
 	$resultat_modif_periode = mysqli_query($GLOBALS["mysqli"], $requete_modif_periode) or die('Erreur SQL !'.$requete_modif_periode.'<br />'.mysqli_error($GLOBALS["mysqli"]));
 	$data_modif_periode = mysqli_fetch_array($resultat_modif_periode);
 }
-// ===================================================================
-//
-//						Affichage de la page
-//
-// ===================================================================
-
-require_once("./menu.inc.php");
-echo "<br/>\n";
-echo "<div id=\"lecorps\">\n";
-require_once("./menu.inc.new.php"); 
 
 echo "<p class=\"bold\">\n";
+if ($action=="modifier" or $action=="ajouter") {
+	echo "<a href=\"admin_periodes_absences.php?action=visualiser".$aff_creneau_diff."\">\n";
+} else {
+	// On veut distinguer le retour vers EdT ou Absences en fonction de la $_SESSION["retour"]
+	if (isset($_SESSION["retour"]) AND $_SESSION["retour"] !== "") {
+		$retour = "	<a href='../../edt_organisation/".$_SESSION["retour"].".php'>\n";
+	} else {
+		$retour = "	<a href='index.php'>\n";
+	}
+	echo $retour;
+}
+echo "	<img src='../../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a>\n";
 // On regarde la table utilisée avant d'afficher le lien
-if ($cren == "diff") {
-	$cherche_table = '';
-	$texte_lien = ' Voir les créneaux de tous les jours';
-	$cherche_table_courante = '&amp;cren=diff';
-}
-else{
-	$cherche_table = '&amp;cren=diff';
-	$texte_lien = ' Voir les cr&eacute;neaux du jour diff&eacute;rent';
-	$cherche_table_courante = '';
-}
-echo "<a href='admin_periodes_absences.php?action=visualiser".$cherche_table."'>".$texte_lien."</a>";
-echo "</p>\n";
+	if ($cren == "diff") {
+		$cherche_table = '';
+		$texte_lien = ' Voir les créneaux de tous les jours';
+	}else{
+		$cherche_table = '&amp;cren=diff';
+		$texte_lien = ' Voir les cr&eacute;neaux du jour diff&eacute;rent';
+	}
+		echo "| <a href='admin_periodes_absences.php?action=visualiser".$cherche_table."'>".$texte_lien."</a>
+	</p>\n";
 
 
 if ($action == "visualiser") {
@@ -309,7 +294,7 @@ if ($compter >= 1) {
 <h2>Définition des créneaux horaires</h2>
 	<p>
 		<a href="admin_periodes_absences.php?action=ajouter<?php echo $aff_creneau_diff; ?>">
-		<img src='../images/icons/add.png' alt='' class='back_link' /> Ajouter un créneau horaire
+		<img src='../../images/icons/add.png' alt='' class='back_link' /> Ajouter un créneau horaire
 		</a>
 	</p><br />
 
@@ -346,8 +331,8 @@ if ($compter >= 1) {
           <td><?php echo $heuredebut_creneau; ?></td>
           <td><?php echo $heurefin_creneau; ?></td>
           <td><?php echo $data_periode['type_creneaux']; ?></td>
-          <td><a href="admin_periodes_absences.php?action=modifier<?php echo $aff_creneau_diff; ?>&amp;id_periode=<?php echo $data_periode['id_definie_periode']; ?>"><img src="../images/icons/configure.png" title="Modifier" border="0" alt="Modifier" /></a></td>
-          <td><a href="admin_periodes_absences.php?action=visualiser<?php echo $aff_creneau_diff; ?>&amp;action_sql=supprimer&amp;id_periode=<?php echo $data_periode['id_definie_periode']; ?>" onClick="return confirm('Etes-vous certain de vouloir supprimer ce créneau ?')"><img src="../templates/DefaultEDT/images/delete2.png" width="22" height="22" title="Supprimer" border="0" alt="Supprimer" /></a></td>
+          <td><a href="admin_periodes_absences.php?action=modifier<?php echo $aff_creneau_diff; ?>&amp;id_periode=<?php echo $data_periode['id_definie_periode']; ?>"><img src="../../images/icons/configure.png" title="Modifier" border="0" alt="Modifier" /></a></td>
+          <td><a href="admin_periodes_absences.php?action=visualiser<?php echo $aff_creneau_diff; ?>&amp;action_sql=supprimer&amp;id_periode=<?php echo $data_periode['id_definie_periode']; ?>" onClick="return confirm('Etes-vous certain de vouloir supprimer ce créneau ?')"><img src="../images/x2.png" width="22" height="22" title="Supprimer" border="0" alt="Supprimer" /></a></td>
         </tr>
      <?php } ?>
     </table>
@@ -357,11 +342,7 @@ if ($compter >= 1) {
 <?php } ?>
 
 
-<?php
-	if ($action == "ajouter" or $action == "modifier") { 
-		echo "<strong><a href='admin_periodes_absences.php?action=visualiser".$cherche_table_courante."'>Retour à la liste des créneaux sans enregistrer</a></strong><br />";
-
-?>
+<?php if ($action == "ajouter" or $action == "modifier") { ?>
 <div style="text-align:center">
   <?php if ($action == "ajouter") { ?>
 
@@ -423,7 +404,7 @@ echo '			</select>
         if ($i === '1') { $i = '2'; $couleur_cellule = 'couleur_ligne_1'; } else { $couleur_cellule = 'couleur_ligne_2'; $i = '1'; } ?>
         <?php if (isset($verification_erreur[$nb]) and $verification_erreur[$nb] != 1) { ?>
          <tr>
-          <td><img src="../templates/DefaultEDT/images/attention.png" width="55" height="53" alt="" /></td>
+          <td><img src="../images/attention.png" width="28" height="28" alt="" /></td>
           <td colspan="3" class="erreur_rouge_jaune"><b>- Erreur -<br />
           <?php if ($verification_erreur[$nb] == 2) { ?>Ce créneau horaire existe déja<?php } ?>
           <?php if ($verification_erreur[$nb] == 5) { ?>L'heure de fin n'est pas définie<?php } ?>
@@ -459,9 +440,8 @@ echo '			</select>
     </form>
 <?php /* fin du div de centrage du tableau pour ie5 */ ?>
 </div>
-</div>
 <?php }
 
-require("../lib/footer.inc.php");
+require("../../lib/footer.inc.php");
 
 ?>
