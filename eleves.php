@@ -1,696 +1,676 @@
 <?php
-@set_time_limit(0);
 /*
-*
-* Copyright 2001, 2012 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
-*
-* This file is part of GEPI.
-*
-* GEPI is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation; either version 2 of the License, or
-* (at your option) any later version.
-*
-* GEPI is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with GEPI; if not, write to the Free Software
-* Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+ *
+ * Copyright 2001, 2012 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ *
+ * This file is part of GEPI.
+ *
+ * GEPI is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * GEPI is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GEPI; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+function connect_ldap($l_adresse,$l_port,$l_login,$l_pwd) {
+    $ds = @ldap_connect($l_adresse, $l_port);
+    if($ds) {
+       // On dit qu'on utilise LDAP V3, sinon la V2 par d?faut est utilis? et le bind ne passe pas.
+       $norme = @ldap_set_option($ds, LDAP_OPT_PROTOCOL_VERSION, 3);
+       // Acces non anonyme
+       if ($l_login != '') {
+          // On tente un bind
+          $b = @ldap_bind($ds, $l_login, $l_pwd);
+       } else {
+          // Acces anonyme
+          $b = @ldap_bind($ds);
+       }
+       if ($b) {
+           return $ds;
+       } else {
+           return false;
+       }
+    } else {
+       return false;
+    }
+}
 
 
 // Initialisations files
 require_once("../lib/initialisations.inc.php");
 
-
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-	die();
+    header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+    die();
 } else if ($resultat_session == '0') {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+    die();
 }
 
 if (!checkAccess()) {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+    die();
 }
 
 include("../lib/initialisation_annee.inc.php");
 $liste_tables_del = $liste_tables_del_etape_eleves;
 
+// Initialisation
+$lcs_ldap_people_dn = 'ou=people,'.$lcs_ldap_base_dn;
+$lcs_ldap_groups_dn = 'ou=groups,'.$lcs_ldap_base_dn;
+
+function add_eleve($_login, $_nom, $_prenom, $_civilite, $_naissance, $_elenoet = 0) {
+    // Fonction d'ajout d'un élève dans la base Gepi
+    if ($_civilite != "M" && $_civilite != "F") {
+        if ($_civilite == 1) {
+            $_civilite = "M";
+        } elseif ($_civilite == 0) {
+            $_civilite = "F";
+        } else {
+            $_civilite = "F";
+        }
+    }
+
+    // Si l'élève existe déjà, on met simplement à jour ses informations...
+    $test = mysqli_query($GLOBALS["mysqli"], "SELECT login FROM eleves WHERE login = '" . $_login . "'");
+    if (mysqli_num_rows($test) > 0) {
+        $record = mysqli_query($GLOBALS["mysqli"], "UPDATE eleves SET nom = '" . $_nom . "', prenom = '" . $_prenom . "', sexe = '" . $_civilite . "', naissance = '" . $_naissance . "', elenoet = '" . $_elenoet . "' WHERE login = '" . $_login . "'");
+    } else {
+        $query = "INSERT into eleves SET
+        login= '" . $_login . "',
+        nom = '" . $_nom . "',
+        prenom = '" . $_prenom . "',
+        sexe = '" . $_civilite . "',
+        naissance = '". $_naissance ."',
+        elenoet = '".$_elenoet."'";
+        $record = mysqli_query($GLOBALS["mysqli"], $query);
+    }
+
+    if ($record) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+
 //**************** EN-TETE *****************
-$titre_page = "Outil d'initialisation de l'année : Importation des élèves - Etape 1";
+$titre_page = "Outil d'initialisation de l'année : Importation des élèves";
 require_once("../lib/header.inc.php");
-//************** FIN EN-TETE ***************
-
-//==================================
-// RNE de l'établissement pour comparer avec le RNE de l'établissement de l'année précédente
-$gepiSchoolRne=getSettingValue("gepiSchoolRne") ? getSettingValue("gepiSchoolRne") : "";
-//==================================
-
-$en_tete=isset($_POST['en_tete']) ? $_POST['en_tete'] : "no";
-
-//debug_var();
-// Passer à 'y' pour afficher les requêtes
-$debug_ele="n";
-
+//**************** FIN EN-TETE *****************
 ?>
-<p class="bold"><a href="index.php#eleves"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour accueil initialisation</a></p>
+<script type="text/javascript">
+<!--
+function CocheCase(boul){
+  len = document.formulaire.elements.length;
+  for( i=0; i<len; i++) {
+    if (document.formulaire.elements[i].type=='checkbox') {
+      document.formulaire.elements[i].checked = boul ;
+    }
+  }
+ }
+
+function InverseSel(){
+  len = document.formulaire.elements.length;
+  for( i=0; i<len; i++) {
+    if (document.formulaire.elements[i].type=='checkbox') {
+      a=!document.formulaire.elements[i].checked  ;
+      document.formulaire.elements[i].checked = a
+    }
+   }
+}
+
+function MetVal(cible){
+len = document.formulaire.elements.length;
+if ( cible== 'nom' ) {
+  a=2;
+  b=document.formulaire.nom.value;
+  } else {
+  a=3;
+  b=document.formulaire.pour.value;
+  }
+for( i=0; i<len; i++) {
+if ((document.formulaire.elements[i].type=='checkbox')
+     &&
+    (document.formulaire.elements[i].checked)
+    ) {
+document.formulaire.elements[i+a].value = b ;
+}}}
+ // -->
+</script>
+
 <?php
 
-echo "<center><h3 class='gepi'>Première phase d'initialisation<br />Importation des élèves</h3></center>\n";
 
 
-if (!isset($_POST["action"])) {
-	//
-	// On sélectionne le fichier à importer
-	//
+echo "<p class='bold'><a href='../init_lcs/index.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a></p>";
 
-	if(isset($_SESSION['init_csv_ligne_entete'])&&($_SESSION['init_csv_ligne_entete']=="no")) {
-		$checked="";
-	}
-	else {
-		$checked=" checked";
-	}
+if (isset($_POST['step'])) {
+	check_token(false);
 
-	echo "<p>Vous allez effectuer la première étape : elle consiste à importer le fichier <b>g_eleves.csv</b> contenant les données élèves.</p>\n";
-	echo "<p>Les champs suivants doivent être présents, dans l'ordre, et <b>séparés par un point-virgule</b> : </p>\n";
-	echo "<ul><li>Nom</li>\n" .
-			"<li>Prénom</li>\n" .
-			"<li>Date de naissance au format JJ/MM/AAAA</li>\n" .
-			"<li>n° identifiant interne à l'établissement<br />(<em>indispensable : c'est ce numéro qui est utilisé pour faire la liaison lors des autres importations</em>)</li>\n" .
-			"<li>n° identifiant national</li>\n" .
-			"<li>Code établissement précédent</li>\n" .
-			"<li>Doublement (<em>OUI ou NON</em>)</li>\n" .
-			"<li>Régime (<em>INTERN ou EXTERN ou IN.EX. ou DP DAN</em>)</li>\n" .
-			"<li>Sexe (<em>F ou M</em>)</li>\n" .
-			"</ul>\n";
-	echo "<p>Veuillez préciser le nom complet du fichier <b>g_eleves.csv</b>.</p>\n";
-	echo "<form enctype='multipart/form-data' action='eleves.php' method='post'>\n";
-	echo add_token_field();
-	echo "<input type='hidden' name='action' value='upload_file' />\n";
-	echo "<p><input type=\"file\" size=\"80\" name=\"csv_file\" />\n";
-	echo "<p><label for='en_tete' style='cursor:pointer;'>Si le fichier à importer comporte une première ligne d'en-tête (<em>non vide</em>) à ignorer, <br />cocher la case ci-contre</label>&nbsp;<input type='checkbox' name='en_tete' id='en_tete' value='yes'$checked /></p>\n";
-	echo "<p><input type='submit' value='Valider' /></p>\n";
-	echo "</form>\n";
+    // L'admin a validé la procédure, on procède donc...
 
-	$sql="SELECT 1=1 FROM utilisateurs WHERE statut='eleve';";
-	if($debug_ele=='y') {echo "<span style='color:green;'>$sql</span><br />";}
-	$test=mysqli_query($GLOBALS["mysqli"], $sql);
-	if(mysqli_num_rows($test)>0) {
-		$sql="SELECT 1=1 FROM tempo_utilisateurs WHERE statut='eleve';";
-		if($debug_ele=='y') {echo "<span style='color:green;'>$sql</span><br />";}
-		$test=mysqli_query($GLOBALS["mysqli"], $sql);
-		if(mysqli_num_rows($test)==0) {
-			echo "<p style='color:red'>Il existe un ou des comptes élèves de l'année passée, et vous n'avez pas mis ces comptes en réserve pour imposer le même login/mot de passe cette année.<br />Est-ce bien un choix délibéré ou un oubli de votre part?<br />Pour conserver ces login/mot de de passe de façon à ne pas devoir re-distribuer ces informations (<em>et éviter de perturber ces utilisateurs</em>), vous pouvez procéder à la mise en réserve avant d'initialiser l'année dans la page <a href='../gestion/changement_d_annee.php'>Changement d'année</a> (<em>vous y trouverez aussi la possibilité de conserver les comptes parents et bien d'autres actions à ne pas oublier avant l'initialisation</em>).</p>\n";
-		}
-	}
+    // On se connecte au LDAP
+    $ds = connect_ldap($lcs_ldap_host,$lcs_ldap_port,"","");
 
-} else {
-	//
-	// Quelque chose a été posté
-	//
-	if ($_POST['action'] == "save_data") {
-		check_token(false);
-		//
-		// On enregistre les données dans la base.
-		// Le fichier a déjà été affiché, et l'utilisateur est sûr de vouloir enregistrer
-		//
+    //----***** STEP 1 *****-----//
 
-		// Première étape : on vide les tables
+    if ($_POST['step'] == "1") {
+        // La première étape consiste à importer les classes
 
-		echo "<p><em>On vide d'abord les tables suivantes&nbsp;:</em> ";
-		$j=0;
-		$k=0;
-		while ($j < count($liste_tables_del)) {
-			$sql="SHOW TABLES LIKE '".$liste_tables_del[$j]."';";
-			//echo "$sql<br />";
-			$test = sql_query1($sql);
-			if ($test != -1) {
-				if($k>0) {echo ", ";}
-				$sql="SELECT 1=1 FROM $liste_tables_del[$j];";
-				$res_test_tab=mysqli_query($GLOBALS["mysqli"], $sql);
-				if(mysqli_num_rows($res_test_tab)>0) {
-					$sql="DELETE FROM $liste_tables_del[$j];";
-					$del = @mysqli_query($GLOBALS["mysqli"], $sql);
-					echo "<b>".$liste_tables_del[$j]."</b>";
-					echo " (".mysqli_num_rows($res_test_tab).")";
-				}
-				else {
-					echo $liste_tables_del[$j];
-				}
-				$k++;
-			}
-			$j++;
-		}
+        if ($_POST['record'] == "yes") {
+            // Les données ont été postées, on les traite donc immédiatement
 
-		// Ménage infos_actions:
-		$sql="SELECT * FROM infos_actions WHERE titre LIKE 'Nouvel élève%';";
-		//echo "$sql<br />";
-		$test = mysqli_query($GLOBALS["mysqli"], $sql);
-		if(mysqli_num_rows($test)>0) {
-			echo "<br />";
-			echo "Suppression d'anciens messages en page d'accueil invitant à créer de nouveaux comptes élèves.";
-			$sql="DELETE FROM infos_actions WHERE titre LIKE 'Nouvel élève%';";
-			$del = mysqli_query($GLOBALS["mysqli"], $sql);
-		}
-
-		// Suppression des comptes d'élèves:
-		echo "<br />\n";
-		echo "<p><em>On supprime les anciens comptes élèves...</em> ";
-		$sql="DELETE FROM utilisateurs WHERE statut='eleve';";
-		$del=mysqli_query($GLOBALS["mysqli"], $sql);
-
-		$i = 0;
-		// Compteur d'erreurs
-		$error = 0;
-		// Compteur d'enregistrement
-		$total = 0;
-
-		// Il faut que les comptes disposant d'un compte élève l'an dernier passent en premier pour récupérer leur login sans qu'il se produise une collision si un nouveau passe avant.
-		//$sql="SELECT * FROM temp_gep_import2;";
-		$sql="(SELECT t.* FROM temp_gep_import2 t, tempo_utilisateurs tu WHERE t.ELENOET=tu.identifiant2) UNION (SELECT * FROM temp_gep_import2 WHERE ELENOET NOT IN (SELECT identifiant2 FROM tempo_utilisateurs));";
-		$res_temp=mysqli_query($GLOBALS["mysqli"], $sql);
-		if(mysqli_num_rows($res_temp)==0) {
-			echo "<p style='color:red'>ERREUR&nbsp;: Aucun élève n'a été trouvé&nbsp;???</p>\n";
-			echo "<p><br /></p>\n";
-			require("../lib/footer.inc.php");
-			die();
-		}
-
-		echo "<br />\n";
-		echo "<p><em>On remplit les tables 'eleves', 'j_eleves_regime', 'j_eleves_etablissements'&nbsp;:</em> ";
-
-		//while (true) {
-		while ($lig=mysqli_fetch_object($res_temp)) {
-			$reg_nom = $lig->ELENOM;
-			$reg_prenom = $lig->ELEPRE;
-			$reg_naissance = $lig->ELEDATNAIS;
-			$reg_id_int = $lig->ELENOET;
-			$reg_id_nat = $lig->ELENONAT;
-			$reg_etab_prec = $lig->ETOCOD_EP;
-			$reg_double = $lig->ELEDOUBL;
-			$reg_regime = $lig->ELEREG;
-			$reg_sexe = $lig->ELESEXE;
-
-			//==========================
-			// DEBUG
-			//echo "<p>\$reg_nom=$reg_nom<br />\n";
-			//echo "\$reg_prenom=$reg_prenom<br />\n";
-			//echo "\$reg_id_int=$reg_id_int<br />\n";
-			//==========================
-
-			// On nettoie et on vérifie :
-			$reg_nom=nettoyer_caracteres_nom(my_strtoupper($reg_nom), "a", " '_-", "");
-			$reg_nom=preg_replace("/'/", " ", $reg_nom);
-
-			if (mb_strlen($reg_nom) > 50) $reg_nom = mb_substr($reg_nom, 0, 50);
-			$reg_prenom=nettoyer_caracteres_nom($reg_prenom, "a", " '_-", "");
-			$reg_prenom=preg_replace("/'/", " ", $reg_prenom);
-
-			if (mb_strlen($reg_prenom) > 50) $reg_prenom = mb_substr($reg_prenom, 0, 50);
-			$naissance = explode("/", $reg_naissance);
-			if (!preg_match("/[0-9]/", $naissance[0]) OR mb_strlen($naissance[0]) > 2 OR mb_strlen($naissance[0]) == 0) $naissance[0] = "00";
-			if (mb_strlen($naissance[0]) == 1) $naissance[0] = "0" . $naissance[0];
-
-			if (!preg_match("/[0-9]/", $naissance[1]) OR mb_strlen($naissance[1] OR mb_strlen($naissance[1]) == 0) > 2) $naissance[1] = "00";
-			if (mb_strlen($naissance[1]) == 1) $naissance[1] = "0" . $naissance[1];
-
-			if (!preg_match("/[0-9]/", $naissance[2]) OR mb_strlen($naissance[2]) > 4 OR mb_strlen($naissance[2]) == 3 OR mb_strlen($naissance[2]) == 1) $naissance[2] = "00";
-			if (mb_strlen($naissance[2]) == 1) $naissance[2] = "0" . $naissance[2];
-
-			//$reg_naissance = mktime(0, 0, 0, $naissance[1], $naissance[0], $naissance[2]);
-			$reg_naissance = $naissance[2] . "-" . $naissance[1] . "-" . $naissance[0];
-			$reg_id_int = preg_replace("/[^0-9]/","",trim($reg_id_int));
-
-			$reg_id_nat = preg_replace("/[^A-Z0-9]/","",trim($reg_id_nat));
-
-			$reg_etab_prec = preg_replace("/[^A-Z0-9]/","",trim($reg_etab_prec));
-
-			$reg_double = trim(my_strtoupper($reg_double));
-			if ($reg_double != "OUI" AND $reg_double != "NON") $reg_double = "NON";
-
-
-			$reg_regime = trim(my_strtoupper($reg_regime));
-			if ($reg_regime != "INTERN" AND $reg_regime != "EXTERN" AND $reg_regime != "IN.EX." AND $reg_regime != "DP DAN") $reg_regime = "DP DAN";
-
-			if ($reg_sexe != "F" AND $reg_sexe != "M") $reg_sexe = "F";
-
-			// Maintenant que tout est propre, on fait un test sur la table eleves pour s'assurer que l'élève n'existe pas déjà.
-			// Ca permettra d'éviter d'enregistrer des élèves en double
-
-			$sql="SELECT count(login) FROM eleves WHERE elenoet = '" . $reg_id_int . "';";
-			if($debug_ele=='y') {echo "<br /><p><span style='color:coral;'>$sql -&gt; $test enregistrement.</span><br />";}
-			$test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], $sql), 0);
-
-			//==========================
-			// DEBUG
-			//echo "\$reg_id_int=$reg_id_int<br />\n";
-			//echo "\$test=$test<br />\n";
-			//==========================
-
-			if ($test == 0) {
-				// Test négatif : aucun élève avec cet ID... on enregistre !
-				$reg_login="";
-
-				if($reg_id_int!='') {
-					$sql="SELECT * FROM tempo_utilisateurs WHERE identifiant2='".$reg_id_int."' AND statut='eleve';";
-					if($debug_ele=='y') {echo "<span style='color:green;'>$sql</span><br />";}
-					$res_tmp_u=mysqli_query($GLOBALS["mysqli"], $sql);
-					if(mysqli_num_rows($res_tmp_u)>0) {
-						$lig_tmp_u=mysqli_fetch_object($res_tmp_u);
-						$reg_login=$lig_tmp_u->login;
-						if($debug_ele=='y') {echo "<span style='color:green;'>On récupère de tempo_utilisateurs le login $reg_login</span><br />";}
-					}
-				}
-	
-				if($reg_login=="") {
-					$default_login_gen_type=getSettingValue('mode_generation_login_eleve');
-					if(($default_login_gen_type=='')||(!check_format_login($default_login_gen_type))) {$default_login_gen_type='nnnnnnnnn_p';}
-
-					$default_login_gen_type_casse=getSettingValue('mode_generation_login_eleve_casse');
-					if(($default_login_gen_type_casse!='min')&&($default_login_gen_type_casse!='maj')) {$default_login_gen_type_casse='min';}
-
-					//$reg_login=generate_unique_login($reg_nom, $reg_prenom, $default_login_gen_type, 'maj');
-					$reg_login=generate_unique_login($reg_nom, $reg_prenom, $default_login_gen_type, $default_login_gen_type_casse);
-					if($debug_ele=='y') {echo "<span style='color:blue;'>Login nouvellement généré pour '$reg_nom $reg_prenom' : '$reg_login'</span><br />";}
-				}
-
-				if((!$reg_login)||($reg_login=="")) {
-					echo "<span style='color:red'><b>Erreur</b> lors de la génération d'un login pour ".$reg_nom." ".$reg_prenom.".</span><br />\n";
-				}
-				else {
-
-					// Normalement on a maintenant un login dont on est sûr qu'il est unique...
-
-					//==========================
-					// DEBUG
-					//echo "On va enregistrer l'élève avec le login \$reg_login=$reg_login</p>\n";
-					//==========================
-
-					// On insere les données
-
-					$sql="INSERT INTO eleves SET " .
-							"no_gep = '" . $reg_id_nat . "', " .
-							"login = '" . $reg_login . "', " .
-							"nom = '" . mysqli_real_escape_string($GLOBALS["mysqli"], $reg_nom) . "', " .
-							"prenom = '" . mysqli_real_escape_string($GLOBALS["mysqli"], $reg_prenom) . "', " .
-							"sexe = '" . $reg_sexe . "', " .
-							"naissance = '" . $reg_naissance . "', " .
-							"elenoet = '" . $reg_id_int . "', " .
-							"ereno = '" . $reg_id_int . "';";
-					if($debug_ele=='y') {echo "<span style='color:blue;'>$sql</span><br />";}
-					$insert = mysqli_query($GLOBALS["mysqli"], $sql);
-					if (!$insert) {
-						$error++;
-						echo "<span style='color:red'><b>ERREUR&nbsp;: </b>".mysqli_error($GLOBALS["mysqli"])."</span><br />\n";
-					} else {
-						$total++;
-
-						// On re-crée le compte utilisateur s'il existait l'année précédente (mais en déclarant le compte inactif)
-						if($reg_id_int!='') {
-							$sql="SELECT * FROM tempo_utilisateurs WHERE identifiant2='".$reg_id_int."' AND statut='eleve';";
-							if($debug_ele=='y') {echo "<span style='color:green;'>$sql</span><br />";}
-							$res_tmp_u=mysqli_query($GLOBALS["mysqli"], $sql);
-							if(mysqli_num_rows($res_tmp_u)>0) {
-								$lig_tmp_u=mysqli_fetch_object($res_tmp_u);
-
-								$sql="INSERT INTO utilisateurs SET login='".$lig_tmp_u->login."', nom='".mysqli_real_escape_string($GLOBALS["mysqli"], $reg_nom)."', prenom='".mysqli_real_escape_string($GLOBALS["mysqli"], $reg_prenom)."', ";
-								if($reg_sexe=='M') {
-									$sql.="civilite='M', ";
-								}
-								else {
-									$sql.="civilite='MLLE', ";
-								}
-								$sql.="password='".$lig_tmp_u->password."', salt='".$lig_tmp_u->salt."', email='".mysqli_real_escape_string($GLOBALS["mysqli"], $lig_tmp_u->email)."', statut='eleve', etat='inactif', change_mdp='n', auth_mode='".$lig_tmp_u->auth_mode."';";
-								if($debug_ele=='y') {echo "<span style='color:blue;'>$sql</span><br />";}
-								$insert_u=mysqli_query($GLOBALS["mysqli"], $sql);
-								if(!$insert_u) {
-									echo "<span style='color:red'><b>Erreur</b> lors de la re-création du compte utilisateur pour ".$reg_nom." ".$reg_prenom.".</span><br />\n";
-								}
-
-							}
-						}
-
-						// On enregistre l'établissement d'origine, le régime, et si l'élève est redoublant
-						//============================================
-						if (($reg_etab_prec != '')&&($reg_id_int != '')) {
-							if($gepiSchoolRne!="") {
-								if($gepiSchoolRne!=$reg_etab_prec) {
-									$sql="SELECT 1=1 FROM j_eleves_etablissements WHERE id_eleve='$reg_id_int';";
-									$test_etab=mysqli_query($GLOBALS["mysqli"], $sql);
-									if(mysqli_num_rows($test_etab)==0){
-										$sql="INSERT INTO j_eleves_etablissements SET id_eleve='$reg_id_int', id_etablissement='$reg_etab_prec';";
-										$insert_etab=mysqli_query($GLOBALS["mysqli"], $sql);
-										if (!$insert_etab) {
-											//echo "<p>Erreur lors de l'enregistrement de l'appartenance de l'élève $reg_nom $reg_prenom à l'établissement $reg_etab_prec.</p>\n";
-											$error++;
-											echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-										}
-									}
-									else {
-										$sql="UPDATE j_eleves_etablissements SET id_etablissement='$reg_etab_prec' WHERE id_eleve='$reg_id_int';";
-										$update_etab=mysqli_query($GLOBALS["mysqli"], $sql);
-										if (!$update_etab) {
-											//echo "<p>Erreur lors de l'enregistrement de l'appartenance de l'élève $reg_nom $reg_prenom à l'établissement $reg_etab_prec.</p>\n";
-											$error++;
-											echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-										}
-									}
-								}
-							}
-							else {
-								// Si le RNE de l'établissement courant (celui du GEPI) n'est pas renseigné, on insère les nouveaux enregistrements, mais on ne met pas à jour au risque d'écraser un enregistrement correct avec l'info que l'élève de 1ère était en 2nde dans le même établissement.
-								// Il suffira de faire un
-								//       DELETE FROM j_eleves_etablissements WHERE id_etablissement='$gepiSchoolRne';
-								// une fois le RNE renseigné.
-								$sql="SELECT 1=1 FROM j_eleves_etablissements WHERE id_eleve='$reg_id_int';";
-								$test_etab=mysqli_query($GLOBALS["mysqli"], $sql);
-								if(mysqli_num_rows($test_etab)==0){
-									$sql="INSERT INTO j_eleves_etablissements SET id_eleve='$reg_id_int', id_etablissement='$reg_etab_prec';";
-									$insert_etab=mysqli_query($GLOBALS["mysqli"], $sql);
-									if (!$insert_etab) {
-										//echo "<p>Erreur lors de l'enregistrement de l'appartenance de l'élève $reg_nom $reg_prenom à l'établissement $reg_etab_prec.</p>\n";
-										$error++;
-										echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-									}
-								}
-							}
-
-						}
-						//============================================
-
-						if ($reg_double == "OUI") {
-							$reg_double = "R";
-						} else {
-							$reg_double = "-";
-						}
-
-						if ($reg_regime == "INTERN") {
-							$reg_regime = "int.";
-						} else if ($reg_regime == "EXTERN") {
-							$reg_regime = "ext.";
-						} else if ($reg_regime == "DP DAN") {
-							$reg_regime = "d/p";
-						} else if ($reg_regime == "IN.EX.") {
-							$reg_regime = "i-e";
-						}
-
-						$insert3 = mysqli_query($GLOBALS["mysqli"], "INSERT INTO j_eleves_regime SET login = '" . $reg_login . "', doublant = '" . $reg_double . "', regime = '" . $reg_regime . "'");
-						if (!$insert3) {
-							$error++;
-							echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-						}
-					}
-				}
-			}
-			$i++;
-			//if (!isset($_POST['ligne'.$i.'_nom'])) break 1;
-		}
-
-		if ($error > 0) {echo "<p><span style='color:red'>Il y a eu " . $error . " erreur(s).</span></p>\n";}
-		if ($total > 0) {echo "<p>" . $total . " élèves ont été enregistrés.</p>\n";}
-
-		echo "<p><a href='index.php#eleves'>Revenir à la page précédente</a></p>\n";
-
-		// On sauvegarde le témoin du fait qu'il va falloir convertir pour remplir les nouvelles tables responsables:
-		saveSetting("conv_new_resp_table", 0);
-
-	} else if ($_POST['action'] == "upload_file") {
-		check_token(false);
-		//
-		// Le fichier vient d'être envoyé et doit être traité
-		// On va donc afficher le contenu du fichier tel qu'il va être enregistré dans Gepi
-		// en proposant des champs de saisie pour modifier les données si on le souhaite
-		//
-
-		if(isset($en_tete)) {
-			$_SESSION['init_csv_ligne_entete']=$en_tete;
-		}
-
-		$csv_file = isset($_FILES["csv_file"]) ? $_FILES["csv_file"] : NULL;
-
-		// On vérifie le nom du fichier... Ce n'est pas fondamentalement indispensable, mais
-		// autant forcer l'utilisateur à être rigoureux
-		if(my_strtolower($csv_file['name']) == "g_eleves.csv") {
-
-			// Le nom est ok. On ouvre le fichier
-			$fp=fopen($csv_file['tmp_name'],"r");
-
-			if(!$fp) {
-				// Aie : on n'arrive pas à ouvrir le fichier... Pas bon.
-				echo "<p>Impossible d'ouvrir le fichier CSV !</p>\n";
-				echo "<p><a href='eleves.php'>Cliquer ici </a> pour recommencer !</p>\n";
-			} else {
-
-				// Fichier ouvert ! On attaque le traitement
-
-				// On va stocker toutes les infos dans un tableau
-				// Une ligne du CSV pour une entrée du tableau
-				$data_tab = array();
-
-				//=========================
-				// On lit une ligne pour passer la ligne d'entête:
-				if($en_tete=="yes") {
-					$ligne = fgets($fp, 4096);
-					echo "<p>A titre d'information, la ligne d'entête passée est la suivante&nbsp;:<br />
-					<span style='color:green'>$ligne</span><br />
-					Si il ne s'agit pas d'une ligne d'entête, vous pouvez <a href='".$_SERVER['PHP_SELF']."'>refaire cette étape</a>.</p>";
-				}
-				//=========================
-
-				$cpt_INE_manquant=0;
-				$msg_INE_manquant="";
-				$k = 0;
-				$nat_num = array();
-				while (!feof($fp)) {
-					$ligne = ensure_utf8(fgets($fp, 4096));
-					if(trim($ligne)!="") {
-
-						$tabligne=explode(";",$ligne);
-
-						// 0 : Nom
-						// 1 : Prénom
-						// 2 : Date de naissance
-						// 3 : identifiant interne
-						// 4 : identifiant national
-						// 5 : établissement précédent
-						// 6 : Doublement (OUI || NON)
-						// 7 : Régime : INTERN || EXTERN || IN.EX. || DP DAN
-						// 8 : Sexe : F || M
-
-						// On nettoie et on vérifie :
-						//=====================================
-						$tabligne[0]=nettoyer_caracteres_nom($tabligne[0], "a", " '_-", "");
-						$tabligne[0]=preg_replace("/'/", " ", $tabligne[0]);
-						if (mb_strlen($tabligne[0]) > 50) {$tabligne[0] = mb_substr($tabligne[0], 0, 50);}
-
-						$tabligne[1]=nettoyer_caracteres_nom($tabligne[1], "a", " '_-", "");
-						$tabligne[1]=preg_replace("/'/", " ", $tabligne[1]);
-						if (mb_strlen($tabligne[1]) > 50) $tabligne[1] = mb_substr($tabligne[1], 0, 50);
-
-						$naissance = explode("/", $tabligne[2]);
-						if (!preg_match("/[0-9]/", $naissance[0]) OR mb_strlen($naissance[0]) > 2 OR mb_strlen($naissance[0]) == 0) $naissance[0] = "00";
-						if (mb_strlen($naissance[0]) == 1) $naissance[0] = "0" . $naissance[0];
-
-						// Au cas où la date de naissance serait vraiment mal fichue:
-						if(!isset($naissance[1])) {
-							$naissance[1]="00";
-						}
-
-						if (!preg_match("/[0-9]/", $naissance[1]) OR mb_strlen($naissance[1] OR mb_strlen($naissance[1]) == 0) > 2) $naissance[1] = "00";
-						if (mb_strlen($naissance[1]) == 1) $naissance[1] = "0" . $naissance[1];
-
-						// Au cas où la date de naissance serait vraiment mal fichue:
-						if(!isset($naissance[2])) {
-							$naissance[2]="0000";
-						}
-
-						if (!preg_match("/[0-9]/", $naissance[2]) OR mb_strlen($naissance[2]) > 4 OR mb_strlen($naissance[2]) == 3 OR mb_strlen($naissance[2]) < 2) $naissance[2] = "0000";
-
-						$tabligne[2] = $naissance[0] . "/" . $naissance[1] . "/" . $naissance[2];
-
-						$tabligne[3] = preg_replace("/[^0-9]/","",trim($tabligne[3]));
-
-						$tabligne[4] = preg_replace("/[^A-Z0-9]/","",trim($tabligne[4]));
-						$tabligne[4] = preg_replace("/\"/", "", $tabligne[4]);
-
-						$tabligne[5] = preg_replace("/[^A-Z0-9]/","",trim($tabligne[5]));
-						$tabligne[5] = preg_replace("/\"/", "", $tabligne[5]);
-
-						$tabligne[6] = trim(my_strtoupper($tabligne[6]));
-						$tabligne[6] = preg_replace("/\"/", "", $tabligne[6]);
-						if ($tabligne[6] != "OUI" AND $tabligne[6] != "NON") $tabligne[6] = "NON";
-
-
-						$tabligne[7] = trim(my_strtoupper($tabligne[7]));
-						$tabligne[7] = preg_replace("/\"/", "", $tabligne[7]);
-						if ($tabligne[7] != "INTERN" AND $tabligne[7] != "EXTERN" AND $tabligne[7] != "IN.EX." AND $tabligne[7] != "DP DAN") $tabligne[7] = "DP DAN";
-
-						$tabligne[8] = trim(my_strtoupper($tabligne[8]));
-						$tabligne[8] = preg_replace("/\"/", "", $tabligne[8]);
-						if ($tabligne[8] != "F" AND $tabligne[8] != "M") $tabligne[8] = "F";
-
-						if ($tabligne[4] != "" AND !in_array($tabligne[4], $nat_num)) {
-							$nat_num[] = $tabligne[4];
-							$data_tab[$k] = array();
-							$data_tab[$k]["nom"] = $tabligne[0];
-							$data_tab[$k]["prenom"] = $tabligne[1];
-							$data_tab[$k]["naissance"] = $tabligne[2];
-							$data_tab[$k]["id_int"] = $tabligne[3];
-							$data_tab[$k]["id_nat"] = $tabligne[4];
-							$data_tab[$k]["etab_prec"] = $tabligne[5];
-							$data_tab[$k]["doublement"] = $tabligne[6];
-							$data_tab[$k]["regime"] = $tabligne[7];
-							$data_tab[$k]["sexe"] = $tabligne[8];
-							// On incrémente pour le prochain enregistrement
-							$k++;
-						}
-						elseif($tabligne[4]== "") {
-							$cpt_INE_manquant++;
-							$msg_INE_manquant.=$tabligne[0]." ".$tabligne[1]." (".$tabligne[2].") sans numéro national (ne sera pas enregistré(e)).<br />";
-						}
-						elseif(in_array($tabligne[4], $nat_num)) {
-							$cpt_INE_manquant++;
-							$msg_INE_manquant.=$tabligne[0]." ".$tabligne[1]." (".$tabligne[2].") a le même numéro INE (".$tabligne[4].") qu'un autre élève pris en compte sans numéro national (ne sera pas enregistré(e)).<br />";
-						}
-					}
-				}
-
-				fclose($fp);
-
-				// Fin de l'analyse du fichier.
-				// Maintenant on va afficher tout ça.
-
-				echo "<form enctype='multipart/form-data' action='eleves.php' method='post'>\n";
-				echo add_token_field();
-				echo "<input type='hidden' name='action' value='save_data' />\n";
-				echo "<table class='boireaus' border='1' summary='Tableau des élèves'>\n";
-				echo "<tr><th>Nom</th><th>Prénom</th><th>Sexe</th><th>Date de naissance</th><th>n° étab.</th><th>n° nat.</th><th>Code étab.</th><th>Double.</th><th>Régime</th></tr>\n";
-
-				$chaine_mysql_collate="";
-				$sql="CREATE TABLE IF NOT EXISTS temp_gep_import2 (
-				ID_TEMPO varchar(40) NOT NULL default '',
-				LOGIN varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELENOM varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEPRE varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELESEXE varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEDATNAIS varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELENOET varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELE_ID varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEDOUBL varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELENONAT varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEREG varchar(40) $chaine_mysql_collate NOT NULL default '',
-				DIVCOD varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ETOCOD_EP varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT1 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT2 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT3 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT4 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT5 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT6 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT7 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT8 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT9 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT10 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT11 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				ELEOPT12 varchar(40) $chaine_mysql_collate NOT NULL default '',
-				LIEU_NAISSANCE varchar(50) $chaine_mysql_collate NOT NULL default '',
-				MEL varchar(255) $chaine_mysql_collate NOT NULL default ''
-				);";
-				$create_table = mysqli_query($GLOBALS["mysqli"], $sql);
-
-				$sql="TRUNCATE TABLE temp_gep_import2;";
-				$vide_table = mysqli_query($GLOBALS["mysqli"], $sql);
-
-				$nb_error=0;
-
-				$alt=1;
-				for ($i=0;$i<$k;$i++) {
-					$alt=$alt*(-1);
-					echo "<tr class='lig$alt'>\n";
-					echo "<td>\n";
-
-					$sql="INSERT INTO temp_gep_import2 SET id_tempo='$i',
-					elenom='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["nom"])."',
-					elepre='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["prenom"])."',
-					elesexe='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["sexe"])."',
-					eledatnais='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["naissance"])."',
-					elenoet='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["id_int"])."',
-					elenonat='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["id_nat"])."',
-					etocod_ep='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["etab_prec"])."',
-					eledoubl='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["doublement"])."',
-					elereg='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["regime"])."';";
-					$insert=mysqli_query($GLOBALS["mysqli"], $sql);
-					if(!$insert) {
-						echo "<span style='color:red'>".$data_tab[$i]["nom"]."</span>";
-						$nb_error++;
+			echo "<p><em>On vide d'abord les tables suivantes&nbsp;:</em> ";
+			$j=0;
+			$k=0;
+			while ($j < count($liste_tables_del)) {
+				$sql="SHOW TABLES LIKE '".$liste_tables_del[$j]."';";
+				//echo "$sql<br />";
+				$test = sql_query1($sql);
+				if ($test != -1) {
+					if($k>0) {echo ", ";}
+					$sql="SELECT 1=1 FROM $liste_tables_del[$j];";
+					$res_test_tab=mysqli_query($GLOBALS["mysqli"], $sql);
+					if(mysqli_num_rows($res_test_tab)>0) {
+						$sql="DELETE FROM $liste_tables_del[$j];";
+						$del = @mysqli_query($GLOBALS["mysqli"], $sql);
+						echo "<b>".$liste_tables_del[$j]."</b>";
+						echo " (".mysqli_num_rows($res_test_tab).")";
 					}
 					else {
-						echo $data_tab[$i]["nom"];
+						echo $liste_tables_del[$j];
 					}
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["prenom"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["sexe"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["naissance"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["id_int"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["id_nat"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["etab_prec"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["doublement"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["regime"];
-					echo "</td>\n";
-					echo "</tr>\n";
+					$k++;
 				}
-
-				echo "</table>\n";
-				echo "<p>$k élèves ont été détectés dans le fichier.</p>\n";
-
-				if($nb_error>0) {
-					echo "<p><span style='color:red'>$nb_error erreur(s) détectée(s) lors de la préparation.</span></p>\n";
-				}
-
-				if($cpt_INE_manquant>0) {
-					echo "<p style='color:red'>".$cpt_INE_manquant." élève(s) ne sera(ont) pas enregistrés&nbsp;:<br />";
-					echo $msg_INE_manquant."</p>";
-				}
-
-				echo "<p><input type='submit' value='Enregistrer' /></p>\n";
-
-				echo "</form>\n";
+				$j++;
 			}
 
-		} else if (trim($csv_file['name'])=='') {
+			// Suppression des comptes d'élèves:
+			echo "<br />\n";
+			echo "<p><em>On supprime les anciens comptes élèves dans Gepi...</em> ";
+			$sql="DELETE FROM utilisateurs WHERE statut='eleve';";
+			$del=mysqli_query($GLOBALS["mysqli"], $sql);
 
-			echo "<p>Aucun fichier n'a été sélectionné !<br />\n";
-			echo "<a href='eleves.php'>Cliquer ici </a> pour recommencer !</p>\n";
+			// Pour ne pas mettre une info_action par classe si aucune période edt_calendrier n'est encore saisie
+			$sql="SELECT 1=1 FROM edt_calendrier WHERE classe_concerne_calendrier!=';' AND classe_concerne_calendrier!='';";
+			$test_cal=mysqli_query($GLOBALS["mysqli"], $sql);
+			$nb_edt_cal=mysqli_num_rows($test_cal);
+			// On ne met alors qu'une seule info_action
+			if($nb_edt_cal==0) {
+				$info_action_titre="Dates de périodes et de vacances";
+				$info_action_texte="Pensez à importer les périodes de vacances et saisir ou mettre à jour les dates de périodes et les classes associées dans <a href='edt_organisation/edt_calendrier.php'>Emplois du temps/Gestion/Gestion du calendrier</a>.<br />Les dates de vacances sont notamment utilisées pour les totaux d'absences.";
+				$info_action_destinataire=array("administrateur");
+				$info_action_mode="statut";
+				enregistre_infos_actions($info_action_titre,$info_action_texte,$info_action_destinataire,$info_action_mode);
+			}
 
-		} else {
-			echo "<p>Le fichier sélectionné n'est pas valide !<br />";
-			echo "<a href='eleves.php'>Cliquer ici </a> pour recommencer !</p>";
+            // On va enregistrer la liste des classes, ainsi que les périodes qui leur seront attribuées
+
+            $sr = ldap_search($ds,$lcs_ldap_groups_dn,"(cn=Classe*)");
+            $data = ldap_get_entries($ds,$sr);
+            for ($i=0;$i<$data["count"];$i++) {
+                $classe=preg_replace("/Classe_/","",$data[$i]["cn"][0]);
+                // On enregistre la classe
+                // On teste d'abord :
+                $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM classes WHERE (classe='$classe')"),0);
+
+                $insert_ou_update_classe="";
+                if ($test == "0") {
+                    $insert_ou_update_classe="insert";
+                    //$reg_classe = mysql_query("INSERT INTO classes SET classe='".$classe."',nom_complet='".$_POST['reg_nom_complet'][$classe]."',suivi_par='".$_POST['reg_suivi'][$classe]."',formule='".$_POST['reg_formule'][$classe]."', format_nom='np'");
+                    $reg_classe = mysqli_query($GLOBALS["mysqli"], "INSERT INTO classes SET classe='".$classe."',nom_complet='".$_POST['reg_nom_complet'][$classe]."',suivi_par='".$_POST['reg_suivi'][$classe]."',formule='".html_entity_decode($_POST['reg_formule'][$classe])."', format_nom='np'");
+
+				$tab_id_classe=array();
+				$sql="SELECT id FROM classes ORDER BY classe;";
+				$res_classe = mysqli_query($GLOBALS["mysqli"], $sql);
+				while($lig_classe=mysqli_fetch_object($res_classe)) {
+					$tab_id_classe[]=$lig_classe->id;
+				}
+
+				// Associer aux vacances:
+				$sql="SELECT * FROM edt_calendrier WHERE numero_periode='0' AND etabvacances_calendrier='1';";
+				$res_cal = mysqli_query($GLOBALS["mysqli"], $sql);
+				while($lig_cal=mysqli_fetch_object($res_cal)) {
+					$chaine_id_classe="";
+
+					$tab_id_classe_deja=explode(";", $lig_cal->classe_concerne_calendrier);
+					for($loop=0;$loop<count($tab_id_classe);$loop++) {
+						if(($tab_id_classe[$loop]==$id_classe)||(in_array($tab_id_classe[$loop], $tab_id_classe_deja))) {
+							$chaine_id_classe.=$tab_id_classe[$loop].";";
+						}
+					}
+
+					$sql="UPDATE edt_calendrier SET classe_concerne_calendrier='".$chaine_id_classe."' WHERE id_calendrier='".$lig_cal->id_calendrier."';";
+					$update_cal = mysqli_query($GLOBALS["mysqli"], $sql);
+				}
+
+                } else {
+                    $insert_ou_update_classe="update";
+                    //$reg_classe = mysql_query("UPDATE classes SET classe='".$classe."',nom_complet='".$_POST['reg_nom_complet'][$classe]."',suivi_par='".$_POST['reg_suivi'][$classe]."',formule='".$_POST['reg_formule'][$classe]."', format_nom='np' WHERE classe='$classe'");
+                    $reg_classe = mysqli_query($GLOBALS["mysqli"], "UPDATE classes SET classe='".$classe."',nom_complet='".$_POST['reg_nom_complet'][$classe]."',suivi_par='".$_POST['reg_suivi'][$classe]."',formule='".html_entity_decode($_POST['reg_formule'][$classe])."', format_nom='np' WHERE classe='$classe'");
+                }
+                if (!$reg_classe) echo "<p>Erreur lors de l'enregistrement de la classe $classe.";
+
+                // On enregistre les périodes pour cette classe
+                // On teste d'abord :
+                $id_classe = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "select id from classes where classe='$classe'"),0,'id');
+                $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM periodes WHERE (id_classe='$id_classe')"),0);
+                if ($test == "0") {
+                    $j = '0';
+                    while ($j < $_POST['reg_periodes_num'][$classe]) {
+                        $num = $j+1;
+                        $nom_per = "Période ".$num;
+                        if ($num == "1") { $ver = "N"; } else { $ver = 'O'; }
+                        $register = mysqli_query($GLOBALS["mysqli"], "INSERT INTO periodes SET num_periode='$num',nom_periode='$nom_per',verouiller='$ver',id_classe='$id_classe'");
+                        if (!$register) echo "<p>Erreur lors de l'enregistrement d'une période pour la classe $classe";
+
+				// 20150810
+                        if($insert_ou_update_classe=="insert") {
+                            $sql="SELECT * FROM edt_calendrier WHERE numero_periode='".$num."';";
+                            $res_cal = mysqli_query($GLOBALS["mysqli"], $sql);
+                            if(mysqli_num_rows($res_cal)==1) {
+                                $lig_cal=mysqli_fetch_object($res_cal);
+
+                                $tab_id_classe_deja=explode(";", $lig_cal->classe_concerne_calendrier);
+                                $chaine_id_classe="";
+                                for($loop=0;$loop<count($tab_id_classe);$loop++) {
+                                    if(($tab_id_classe[$loop]==$id_classe)||(in_array($tab_id_classe[$loop], $tab_id_classe_deja))) {
+                                        $chaine_id_classe.=$tab_id_classe[$loop].";";
+                                    }
+                                }
+
+                                $sql="UPDATE edt_calendrier SET classe_concerne_calendrier='".$chaine_id_classe."' WHERE id_calendrier='".$lig_cal->id_calendrier."';";
+                                $update_cal = mysqli_query($GLOBALS["mysqli"], $sql);
+
+                                $sql="UPDATE periodes SET date_fin='".$lig_cal->jourfin_calendrier."' WHERE id_classe='".$id_classe."' AND num_periode='".$lig_cal->numero_periode."';";
+                                $update_per=mysqli_query($GLOBALS["mysqli"], $sql);
+                            }
+                            elseif($nb_edt_cal>0) {
+                                $info_action_titre="Dates de périodes pour la classe ".get_nom_classe($id_classe);
+                                $info_action_texte="Pensez à contrôler que la classe ".get_nom_classe($id_classe)." est bien associée aux périodes et vacances dans <a href='edt_organisation/edt_calendrier.php'>Emplois du temps/Gestion/Gestion du calendrier</a>.";
+                                $info_action_destinataire=array("administrateur");
+                                $info_action_mode="statut";
+                                enregistre_infos_actions($info_action_titre,$info_action_texte,$info_action_destinataire,$info_action_mode);
+                            }
+                        }
+
+                        $j++;
+                    }
+                } else {
+                    // on "démarque" les périodes des classes qui ne sont pas à supprimer
+                    $sql = mysqli_query($GLOBALS["mysqli"], "UPDATE periodes SET verouiller='N' where (id_classe='$id_classe' and num_periode='1')");
+                    $sql = mysqli_query($GLOBALS["mysqli"], "UPDATE periodes SET verouiller='O' where (id_classe='$id_classe' and num_periode!='1')");
+                    //
+                    $nb_per = mysqli_num_rows(mysqli_query($GLOBALS["mysqli"], "select num_periode from periodes where id_classe='$id_classe'"));
+                    if ($nb_per > $_POST['reg_periodes_num'][$classe]) {
+                        // Le nombre de périodes de la classe est inférieur au nombre enregistré
+                        // On efface les périodes en trop
+                        $k = 0;
+                        for ($k=$_POST['reg_periodes_num'][$classe]+1; $k<$nb_per+1; $k++) {
+                            $del = mysqli_query($GLOBALS["mysqli"], "delete from periodes where (id_classe='$id_classe' and num_periode='$k')");
+                        }
+                    }
+                    if ($nb_per < $_POST['reg_periodes_num'][$classe]) {
+
+                        // Le nombre de périodes de la classe est supérieur au nombre enregistré
+                        // On enregistre les périodes
+                        $k = 0;
+                        $num = $nb_per;
+                        for ($k=$nb_per+1 ; $k < $_POST['reg_periodes_num'][$classe]+1; $k++) {
+                            $num++;
+                            $nom_per = "Période ".$num;
+                            if ($num == "1") { $ver = "N"; } else { $ver = 'O'; }
+                            $register = mysqli_query($GLOBALS["mysqli"], "INSERT INTO periodes SET num_periode='$num',nom_periode='$nom_per',verouiller='$ver',id_classe='$id_classe'");
+                            if (!$register) echo "<p>Erreur lors de l'enregistrement d'une période pour la classe $classe";
+                        }
+                    }
+                }
+
+            }
+
+			$sql="update periodes set date_verrouillage='0000-00-00 00:00:00';";
+			$res=mysqli_query($GLOBALS["mysqli"], $sql);
+			if($res) {
+				echo "Réinitialisation des dates de verrouillage de périodes effectuée.<br />";
+			}
+			else {
+				echo "Erreur lors de la réinitialisation des dates de verrouillage de périodes.<br />";
+			}
+
+            // On efface les classes qui ne sont pas réutilisées cette année  ainsi que les entrées correspondantes dans  j_classes_matieres_professeurs
+            $res_menage = mysqli_query($GLOBALS["mysqli"], "select distinct id_classe from periodes where verouiller='T'");
+            $k = 0;
+            while ($k < mysqli_num_rows($res_menage)) {
+               $id_classe = old_mysql_result($res_menage, $k);
+               $res1 = mysqli_query($GLOBALS["mysqli"], "delete from classes where id='".$id_classe."'");
+               $res2 = mysqli_query($GLOBALS["mysqli"], "delete from j_classes_matieres_professeurs where id_classe='".$id_classe."'");
+               $res3 = mysqli_query($GLOBALS["mysqli"], "delete from d_dates_evenements_classes where id_classe='".$id_classe."'");
+               // On supprime les groupes qui étaient liées à la classe
+               $get_groupes = mysqli_query($GLOBALS["mysqli"], "SELECT id_groupe FROM j_groupes_classes WHERE id_classe = '" . $id_classe . "'");
+               for ($l=0;$l<$nb_groupes;$l++) {
+                    $id_groupe = old_mysql_result($get_groupes, $l, "id_groupe");
+                    $delete2 = mysqli_query($GLOBALS["mysqli"], "delete from j_groupes_classes WHERE id_groupe = '" . $id_groupe . "'");
+                    // On regarde si le groupe est toujours lié à une autre classe ou pas
+                    $check = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM j_groupes_classes WHERE id_groupe = '" . $id_groupe . "'"), 0);
+                    if ($check == "0") {
+                        $delete1 = mysqli_query($GLOBALS["mysqli"], "delete from groupes WHERE id = '" . $id_groupe . "'");
+                        $delete2 = mysqli_query($GLOBALS["mysqli"], "delete from j_groupes_matieres WHERE id_groupe = '" . $id_groupe . "'");
+                        $delete2 = mysqli_query($GLOBALS["mysqli"], "delete from j_groupes_professeurs WHERE id_groupe = '" . $id_groupe . "'");
+                    }
+               }
+
+               // 20150810
+               $sql="SELECT * FROM edt_calendrier WHERE classe_concerne_calendrier LIKE '".$id_classe.";%' OR classe_concerne_calendrier LIKE '%;".$id_classe.";%';";
+               $res_edt=mysqli_query($GLOBALS["mysqli"], $sql);
+               if(mysqli_num_rows($res_edt)>0) {
+                   while($lig_edt=mysqli_fetch_object($res_edt)) {
+                       $sql="UPDATE edt_calendrier SET classe_concerne_calendrier='".preg_replace("/^$id_classe;/", "", preg_replace("/;$id_classe;/", ";", $lig_edt->classe_concerne_calendrier))."' WHERE classe_concerne_calendrier LIKE '".$id_classe.";%' OR classe_concerne_calendrier LIKE '%;".$id_classe.";%';";
+                       $update=mysqli_query($GLOBALS["mysqli"], $sql);
+                   }
+               }
+
+               $k++;
+            }
+            $res = mysqli_query($GLOBALS["mysqli"], "delete from periodes where verouiller='T'");
+            echo "<p>Vous venez d'effectuer l'enregistrement des données concernant les classes. S'il n'y a pas eu d'erreurs, vous pouvez aller à l'étape suivante pour enregistrer les données concernant les élèves.</p>";
+            echo "<p><b>ATTENTION</b> :<br>Les champs \"régime\" (demi-pensionnaire, externe, ...), \"doublant\"  et \"identifiant national\" ne sont pas présents dans l'annuaire LDAP.
+            Il en est de même de toutes les informations sur les responsables des élèves.
+            <br />A l'issue de cette étape, <b>vous devrez donc procéder à une opération consistant à convertir la table \"eleves\" et à importer les informations manquantes.</b>
+            <br />Vous devrez pour cela fournir des fichiers CSV (ELEVES.CSV, PERSONNES.CSV, RESPONSABLES.CSV et ADRESSES.CSV) <b><a href=\"../init_xml/lecture_xml_sconet.php\" target=\"_blank\">générés ici</a></b> depuis des fichiers XML extraits de SCONET.</p>";
+            echo "<center>";
+            echo "<form enctype='multipart/form-data' action='eleves.php' method=post name='formulaire'>";
+			echo add_token_field();
+            echo "<input type=\"hidden\" name=\"record\" value=\"no\" />";
+            echo "<input type=\"hidden\" name=\"step\" value=\"2\" />";
+            echo "<input type=\"submit\" value=\"Accéder à l'étape 2\" />";
+            echo "</form>";
+            echo "</center>";
+
+			// On sauvegarde le témoin du fait qu'il va falloir
+			// convertir pour générer l'ELE_ID et remplir ensuite les nouvelles tables responsables:
+			saveSetting("conv_new_resp_table", 0);
+
+
+        } else {
+            // Les données n'ont pas encore été postées, on affiche donc le tableau des classes
+
+            // On commence par "marquer" les classes existantes dans la base
+            $sql = mysqli_query($GLOBALS["mysqli"], "UPDATE periodes SET verouiller='T'");
+
+            $sr = ldap_search($ds,$lcs_ldap_groups_dn,"(cn=Classe*)");
+            $data = ldap_get_entries($ds,$sr);
+
+            // On va enregistrer la liste des classes, ainsi que les périodes qui leur seront attribuées
+
+            echo "<form enctype='multipart/form-data' action='eleves.php' method=post name='formulaire'>";
+			echo add_token_field();
+            echo "<input type=hidden name='record' value='yes'>";
+            echo "<input type=hidden name='step' value='1'>";
+
+            echo "<p>Les classes en vert indiquent des classes déjà existantes dans la base GEPI.<br />Les classes en rouge indiquent des classes nouvelles et qui vont être ajoutées à la base GEPI.<br /></p>";
+            echo "<p>Pour les nouvelles classes, des noms standards sont utilisés pour les périodes (période 1, période 2...), et seule la première période n'est pas verrouillée. Vous pourrez modifier ces paramètres ultérieurement</p>";
+            echo "<p>Attention !!! Il n'y a pas de tests sur les champs entrés. Soyez vigilant à ne pas mettre des caractères spéciaux dans les champs ...</p>";
+            echo "<p>Essayez de remplir tous les champs, cela évitera d'avoir à le faire ultérieurement.</p>";
+            echo "<p>N'oubliez pas <b>d'enregistrer les données</b> en cliquant sur le bouton en bas de la page<br /><br />";
+
+            ?>
+            <fieldset style="padding-top: 8px; padding-bottom: 8px;  margin-left: 8px; margin-right: 100px;">
+            <legend style="font-variant: small-caps;"> Aide au remplissage </legend>
+            <table border="0">
+            <tr>
+              <td width="2%">&nbsp;</td>
+              <td width="2%">&nbsp;</td>
+              <td width="2%">&nbsp;</td>
+              <td width="2%">&nbsp;</td>
+              <td width="25%">&nbsp;</td>
+              <td width="53%">&nbsp;</td>
+            </tr>
+            <tr>
+              <td>&nbsp;</td>
+              <td colspan="5">Vous pouvez remplir les cases <font color="red">
+            une à une</font> et/ou <font color="red">globalement</font> grâce aux
+            fonctionnalités offertes ci-dessous :</td>
+            </tr>
+            <tr>
+              <td colspan="2">&nbsp;</td>
+              <td colspan="4">1) D'abord, cochez les lignes une à une</td>
+            </tr>
+              <tr>
+              <td colspan="3">&nbsp;</td>
+              <td colspan="3">Vous pouvez aussi &nbsp;
+              <a href="javascript:CocheCase(true)">
+              COCHER</a> ou
+              <a href="javascript:CocheCase(false)">
+              DECOCHER</a> toutes les lignes , ou
+              <a href="javascript:InverseSel()">
+              INVERSER </a>la sélection</td>
+            </tr>
+            <tr>
+              <td colspan="2">&nbsp;</td>
+              <td colspan="4">2) Puis, pour les lignes cochées :</td>
+            </tr>
+             <tr>
+              <td colspan="4">&nbsp;</td>
+              <td align="right">le nom au bas du bulletin sera &nbsp;:&nbsp;</td>
+              <td><input type="text" name="nom" maxlength="80" size="40">
+              <input type ="button" name="but_nom" value="Recopier"
+            onclick="javascript:MetVal('nom')"></td>
+             </td>
+            </tr>
+             <tr>
+              <td colspan="4">&nbsp;</td>
+              <td align="right">la formule au bas du bulletin sera
+            &nbsp;:&nbsp;</td>
+              <td><input type="text" name="pour" maxlength="80" size="40">
+              <input type ="button" name="but_pour" value="Recopier"
+            onclick="javascript:MetVal('pour')"></td>
+             </td>
+            </tr>
+            <tr>
+              <td colspan="2">&nbsp;</td>
+              <td colspan="4">3) Cliquez sur les boutons "Recopier" pour remplir les champs selectionnés.</td>
+            </tr>
+
+            </table>
+            </fieldset>
+            <br />
+            <?php
+            echo "<table border=1 cellpadding=2 cellspacing=2>";
+            echo "<tr><td><p class=\"small\"><center>Aide<br />Remplissage</center></p></td><td><p class=\"small\">Identifiant de la classe</p></td><td><p class=\"small\">Nom complet</p></td><td><p class=\"small\">Nom apparaissant au bas du bulletin</p></td><td><p class=\"small\">formule au bas du bulletin</p></td><td><p class=\"small\">Nombres de périodes</p></td></tr>";
+            for ($i=0;$i<$data["count"];$i++) {
+                $classe_id = preg_replace("/Classe_/","",$data[$i]["cn"][0]);
+                $description= $data[$i]["description"][0];
+                if ($description == "") $description = $classe_id;
+
+                $test_classe_exist = mysqli_query($GLOBALS["mysqli"], "SELECT * FROM classes WHERE classe='$classe_id'");
+                $nb_test_classe_exist = mysqli_num_rows($test_classe_exist);
+
+                if ($nb_test_classe_exist==0) {
+                    $nom_complet = $description;
+                    $nom_court = "<font color=red>".$classe_id."</font>";
+                    $suivi_par = getSettingValue("gepiAdminPrenom")." ".getSettingValue("gepiAdminNom").", ".getSettingValue("gepiAdminFonction");
+                    $formule = "";
+                    $nb_per = '3';
+                } else {
+                    $id_classe = old_mysql_result($test_classe_exist, 0, 'id');
+                    $nb_per = mysqli_num_rows(mysqli_query($GLOBALS["mysqli"], "select num_periode from periodes where id_classe='$id_classe'"));
+                    $nom_court = "<font color=green>".$description."</font>";
+                    $nom_complet = old_mysql_result($test_classe_exist, 0, 'nom_complet');
+                    $suivi_par = old_mysql_result($test_classe_exist, 0, 'suivi_par');
+                    $formule = old_mysql_result($test_classe_exist, 0, 'formule');
+                }
+                echo "<tr>";
+                echo "<td><center><input type=\"checkbox\"></center></td>\n";
+                echo "<td>";
+                echo "<p><b><center>$nom_court</center></b></p>";
+                echo "";
+                echo "</td>";
+                echo "<td>";
+                echo "<input type=text name='reg_nom_complet[$classe_id]' value=\"".$nom_complet."\">\n";
+                echo "</td>";
+                echo "<td>";
+                echo "<input type=text name='reg_suivi[$classe_id]' value=\"".$suivi_par."\">\n";
+                echo "</td>";
+                echo "<td>";
+                echo "<input type=text name='reg_formule[$classe_id]' value=\"".$formule."\">\n";
+                echo "</td>";
+                echo "<td>";
+                echo "<select size=1 name='reg_periodes_num[$classe_id]'>\n";
+                for ($k=1;$k<7;$k++) {
+                    echo "<option value='$k'";
+                    if ($nb_per == "$k") echo " SELECTED";
+                    echo ">$k";
+                }
+                echo "</select>";
+                echo "</td></tr>";
+            }
+            echo "</table>\n";
+            echo "<input type=hidden name='step2' value='y'>\n";
+            echo "<center><input type='submit' value='Enregistrer les données'></center>\n";
+            echo "</form>\n";
+
+        }
+
+
+
+    //----***** STEP 2 *****-----//
+    } elseif ($_POST['step'] == "2") {
+        // LDAP attribute
+        $ldap_people_attr = array(
+        "uid",               // login
+        "cn",                // Prenom  Nom
+        "sn",               // Nom
+        "givenname",            // Pseudo
+        "mail",              // Mail
+        "homedirectory",           // Home directory personnal web space
+        "description",
+        "loginshell",
+        "gecos",             // Date de naissance,Sexe (F/M),
+        "employeenumber"    // identifiant gep
+        );
+
+        // La deuxième étape consiste à importer les élèves et à les affecter dans les classes
+        $classes = mysqli_query($GLOBALS["mysqli"], "SELECT id, classe FROM classes");
+        $nb_classes = mysqli_num_rows($classes);
+        $eleves_de = array();
+        echo "<table border=\"1\" cellpadding=\"3\" cellspacing=\"3\">\n<tr><td>Nom de la classe</td><td>Login élève</td><td>Nom </td><td>Prénom</td><td>Sexe</td><td>Date de naissance</td><td>Numéro GEP</td></tr>\n";
+        for ($i=0;$i<$nb_classes;$i++) {
+            $current_classe = old_mysql_result($classes, $i, "classe");
+            $current_classe_id = old_mysql_result($classes, $i, "id");
+            $filtre = "(cn=Classe_".$current_classe.")";
+            $result= ldap_search ($ds, $lcs_ldap_groups_dn, $filtre);
+            if ($result) {
+                $info = @ldap_get_entries( $ds, $result );
+                for ( $u = 0; $u < $info[0]["memberuid"]["count"] ; $u++ ) {
+                  $uid = $info[0]["memberuid"][$u] ;
+                  if (trim($uid) !="") {
+                    $eleve_de[$current_classe_id]=$uid;
+                    // Extraction des infos sur l'élève :
+                    $result2 = @ldap_read ( $ds, "uid=".$uid.",".$lcs_ldap_people_dn, "(objectclass=posixAccount)", $ldap_people_attr );
+                    if ($result2) {
+                        $info2 = @ldap_get_entries ( $ds, $result2 );
+                        if ( $info2["count"]) {
+                            // Traitement du champ gecos pour extraction de date de naissance, sexe
+                            $gecos = $info2[0]["gecos"][0];
+                            $tmp = split ("[\,\]",$info2[0]["gecos"][0],4);
+                            $ret_people = array (
+                            "uid"        			=> $info2[0]["uid"][0],
+                            "nom"        			=> stripslashes($info2[0]["sn"][0]),
+                            "fullname"        => stripslashes($info2[0]["cn"][0]),
+                            "pseudo"      		=> $info2[0]["givenname"][0],
+                            "email"       		=> $info2[0]["mail"][0],
+                            "homedirectory"   => $info2[0]["homedirectory"][0],
+                            "description" 		=> $info2[0]["description"][0],
+                            "shell"           => $info2[0]["loginshell"][0],
+                            "sexe"            => $tmp[2],
+                            "naissance"       => $tmp[1],
+                            "no_gep"          => $info2[0]["employeenumber"][0]
+                            );
+                            $long = mb_strlen($ret_people["fullname"]) - mb_strlen($ret_people["nom"]);
+                            $prenom = mb_substr($ret_people["fullname"], 0, $long) ;
+
+
+                            $add = add_eleve($uid,$ret_people["nom"],$prenom,$tmp[2],$tmp[1],$ret_people["no_gep"]);
+                            $get_periode_num = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM periodes WHERE (id_classe = '" . $current_classe_id . "')"), 0);
+                            $check = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM j_eleves_classes WHERE (login = '" . $uid . "')"), 0);
+                            if ($check > 0)
+                                $del = mysqli_query($GLOBALS["mysqli"], "DELETE from j_eleves_classes WHERE login = '" . $uid . "'");
+                            for ($k=1;$k<$get_periode_num+1;$k++) {
+                                $res = mysqli_query($GLOBALS["mysqli"], "INSERT into j_eleves_classes SET login = '" . $uid . "', id_classe = '" . $current_classe_id . "', periode = '" . $k . "'");
+                            }
+                            $check = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM j_eleves_regime WHERE (login = '" . $uid . "')"), 0);
+                            if ($check > 0)
+                                $del = mysqli_query($GLOBALS["mysqli"], "DELETE from j_eleves_regime WHERE login = '" . $uid . "'");
+                            $res = mysqli_query($GLOBALS["mysqli"], "INSERT into j_eleves_regime SET login = '" . $uid . "',
+                            regime  = 'd/p',
+                            doublant  = '-'");
+                        }
+                        @ldap_free_result ( $result2 );
+                    }
+                    $date_naissance = mb_substr($tmp[1],6,2)."-".mb_substr($tmp[1],4,2)."-".mb_substr($tmp[1],0,4) ;
+                    echo "<tr><td>".$current_classe."</td><td>".$uid."</td><td>".$ret_people["nom"]."</td><td>".$prenom."</td><td>".$tmp[2]."</td><td>".$date_naissance."</td><td>".$ret_people["no_gep"]."</td></tr>\n";
+                  }
+                }
+            }
+            @ldap_free_result ( $result );
+        }
+        echo "</table><p>Opération effectuée.</p>";
+        echo "<p>Avant de passer à l'étape suivante, vous devez procéder à la conversion de la table \"eleves\" et à l'importation des données manquantes :
+        <a href='../responsables/conversion.php?mode=1'>Conversion et importation des données manquantes</a>.</p>";
+    }
+
+} else {
+    echo "<p>L'opération d'importation des élèves depuis le LDAP de LCS va effectuer les opérations suivantes :</p>";
+    echo "<ul>";
+    echo "<li>Importation des classes.</li>";
+    echo "<li>Tentative d'ajout de chaque élèves présent dans l'annuaire de LCS.</li>";
+    echo "<li>Si l'élève n'existe pas, il est créé.</li>";
+    echo "<li>Si l'élève existe déjà, ses informations de base sont mises à jour.</li>";
+    echo "<li>Affectation des élèves aux classes.</li>";
+    echo "</ul>";
+
+
+	echo "<form enctype='multipart/form-data' action='eleves.php' method=post>";
+	echo add_token_field();
+	echo "<input type=hidden name='step' value='1'>";
+	echo "<input type=hidden name='record' value='no'>";
+	$j=0;
+	$flag=0;
+	for($j=0;$j<count($liste_tables_del);$j++) {
+		$sql="SHOW TABLES LIKE '".$liste_tables_del[$j]."';";
+		//echo "$sql<br />";
+		$test = sql_query1($sql);
+		if ($test != -1) {
+			$sql="SELECT 1=1 FROM $liste_tables_del[$j];";
+			$res_test_tab=mysqli_query($GLOBALS["mysqli"], $sql);
+			if(mysqli_num_rows($res_test_tab)>0) {
+				$flag=1;
+				break;
+			}
 		}
+		//flush();
 	}
+
+    if ($flag != 0){
+        echo "<p><b>ATTENTION ...</b><br />";
+        echo "Des données concernant la constitution des classes et l'affectation des élèves dans les classes sont présentes dans la base GEPI ! Si vous poursuivez la procédure, ces données seront définitivement effacées !</p>";
+    }
+
+    echo "<p>Etes-vous sûr de vouloir importer tous les élèves depuis l'annuaire du serveur LCS vers Gepi ?</p>";
+    echo "<br/>";
+    echo "<input type='submit' value='Je suis sûr'>";
+    echo "</form>";
 }
-echo "<p><br /></p>\n";
+
 require("../lib/footer.inc.php");
 ?>
