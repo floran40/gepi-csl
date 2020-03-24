@@ -1,7 +1,7 @@
 <?php
 /*
  *
- * Copyright 2001, 2012 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ * Copyright 2001, 2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
  *
  * This file is part of GEPI.
  *
@@ -19,30 +19,6 @@
  * along with GEPI; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-
-function connect_ldap($l_adresse,$l_port,$l_login,$l_pwd) {
-    $ds = @ldap_connect($l_adresse, $l_port);
-    if($ds) {
-       // On dit qu'on utilise LDAP V3, sinon la V2 par d?faut est utilis? et le bind ne passe pas.
-       $norme = @ldap_set_option($ds, LDAP_OPT_PROTOCOL_VERSION, 3);
-       // Acc?s non anonyme
-       if ($l_login != '') {
-          // On tente un bind
-          $b = @ldap_bind($ds, $l_login, $l_pwd);
-       } else {
-          // Acc?s anonyme
-          $b = @ldap_bind($ds);
-       }
-       if ($b) {
-           return $ds;
-       } else {
-           return false;
-       }
-    } else {
-       return false;
-    }
-}
-
 
 // Initialisations files
 require_once("../lib/initialisations.inc.php");
@@ -65,67 +41,42 @@ if (!checkAccess()) {
 include("../lib/initialisation_annee.inc.php");
 $liste_tables_del = $liste_tables_del_etape_matieres;
 
-// Initialisation
-$lcs_ldap_people_dn = 'ou=people,'.$lcs_ldap_base_dn;
-$lcs_ldap_groups_dn = 'ou=groups,'.$lcs_ldap_base_dn;
 
 //**************** EN-TETE *****************
 $titre_page = "Outil d'initialisation de l'année : Importation des matières";
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
 
-echo "<p class=bold><a href='../init_lcs/index.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a></p>";
+echo "<p class=bold><a href='../init_scribe/index.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a></p>";
 
 if (isset($_POST['is_posted'])) {
-	check_token();
-
+	check_token(false);
     // L'admin a validé la procédure, on procède donc...
+    include "../lib/eole_sync_functions.inc.php";
+    // On commence par récupérer toutes les matières depuis le LDAP
+    $ldap_server = new LDAPServer;
+    $sr = ldap_search($ldap_server->ds,$ldap_server->base_dn,"(description=Matiere*)");
+    $info = ldap_get_entries($ldap_server->ds,$sr);
 
-    // On se connecte au LDAP
-    $ds = connect_ldap($lcs_ldap_host,$lcs_ldap_port,"","");
-
-    // On commence par récupérer tous les profs depuis le LDAP
-    $sr = ldap_search($ds,$lcs_ldap_base_dn,"(cn=Matiere_*)");
-    $info = ldap_get_entries($ds,$sr);
 
     if ($_POST['record'] == "yes") {
         // Suppression des données présentes dans les tables en lien avec les matières
-
-		echo "<p><em>On vide d'abord les tables suivantes&nbsp;:</em> ";
-		$j=0;
-		$k=0;
-		while ($j < count($liste_tables_del)) {
-			$sql="SHOW TABLES LIKE '".$liste_tables_del[$j]."';";
-			//echo "$sql<br />";
-			$test = sql_query1($sql);
-			if ($test != -1) {
-				if($k>0) {echo ", ";}
-				$sql="SELECT 1=1 FROM $liste_tables_del[$j];";
-				$res_test_tab=mysqli_query($GLOBALS["mysqli"], $sql);
-				if(mysqli_num_rows($res_test_tab)>0) {
-					$sql="DELETE FROM $liste_tables_del[$j];";
-					$del = @mysqli_query($GLOBALS["mysqli"], $sql);
-					echo "<b>".$liste_tables_del[$j]."</b>";
-					echo " (".mysqli_num_rows($res_test_tab).")";
-				}
-				else {
-					echo $liste_tables_del[$j];
-				}
-				$k++;
-			}
-			$j++;
-		}
-
-		// Ménage sur l'ordre des groupes dans l'affichage simplifié prof:
-		// Sinon, on peut se retrouver avec des rangs aberrants liés à des groupes qui n'existent plus dans la table groupes.
-		$sql="DELETE FROM preferences WHERE name LIKE 'accueil_simpl_id_groupe_order_%';";
-		$del=mysqli_query($GLOBALS["mysqli"], $sql);
+        /* NON! On ne fait qu'une mise à jour de la liste, le cas échéant...
+        $j=0;
+        while ($j < count($liste_tables_del)) {
+            if (old_mysql_result(mysql_query("SELECT count(*) FROM $liste_tables_del[$j]"),0)!=0) {
+                $del = @mysql_query("DELETE FROM $liste_tables_del[$j]");
+            }
+            $j++;
+        }
+        */
 
         $new_matieres = array();
-        echo "<table border=\"1\" cellpadding=\"3\" cellspacing=\"3\">\n";
-        echo "<tr><td>Identifiant matière</td><td>Nom complet matière</td><td>identifiants prof.</td></tr>\n";
         for ($i=0;$i<$info["count"];$i++) {
-            $matiere=preg_replace("/Matiere_/","",$info[$i]["cn"][0]);
+
+            $matiere = $info[$i]["cn"][0];
+            $matiere = traitement_magic_quotes(corriger_caracteres(trim($matiere)));
+            $matiere = preg_replace("/[^A-Za-z0-9.\-]/","",strtoupper($matiere));
             $get_matieres = mysqli_query($GLOBALS["mysqli"], "SELECT matiere FROM matieres");
             $nbmat = mysqli_num_rows($get_matieres);
             $matieres = array();
@@ -134,44 +85,26 @@ if (isset($_POST['is_posted'])) {
             }
 
             if (!in_array($matiere, $matieres)) {
-                $reg_matiere = mysqli_query($GLOBALS["mysqli"], "INSERT INTO matieres SET matiere='".$matiere."',nom_complet='".html_entity_decode(stripslashes($_POST['reg_nom_complet'][$matiere]))."', priority='0',matiere_aid='n',matiere_atelier='n'");
+                $reg_matiere = mysqli_query($GLOBALS["mysqli"], "INSERT INTO matieres SET matiere='".$matiere."',nom_complet='".($_POST['reg_nom_complet'][$matiere])."', priority='11',matiere_aid='n',matiere_atelier='n'");
             } else {
-                $reg_matiere = mysqli_query($GLOBALS["mysqli"], "UPDATE matieres SET nom_complet='".html_entity_decode(stripslashes($_POST['reg_nom_complet'][$matiere]))."' WHERE matiere = '" . $matiere . "'");
+                $reg_matiere = mysqli_query($GLOBALS["mysqli"], "UPDATE matieres SET nom_complet='".($_POST['reg_nom_complet'][$matiere])."' WHERE matiere = '" . $matiere . "'");
             }
             if (!$reg_matiere) echo "<p>Erreur lors de l'enregistrement de la matière $matiere.";
             $new_matieres[] = $matiere;
 
             // On regarde maintenant les affectations professeur/matière
-            $list_member = "";
-            if ($info[$i]["memberuid"]["count"] > 0) {
-              for ( $u = 0; $u < $info[$i]["memberuid"]["count"] ; $u++ ) {
-                $member = preg_replace ("/^uid=([^,]+),ou=.*/" , "\\1", $info[$i]["memberuid"][$u] );
-                if (trim($member) !="") {
-                    if ($list_member != "") $list_member .=", ";
-                    $list_member .=$member;
-                    $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM j_professeurs_matieres WHERE (id_professeur = '" . $member . "' and id_matiere = '" . $matiere . "')"), 0);
-                    if ($test == 0) {
-                        $res = mysqli_query($GLOBALS["mysqli"], "INSERT into j_professeurs_matieres SET id_professeur = '" . $member . "', id_matiere = '" . $matiere . "'");
-                    }
+            for($k=0;$k<$info[$i]["memberuid"]["count"];$k++) {
+                $member = $info[$i]["memberuid"][$k];
+                $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM j_professeurs_matieres WHERE (id_professeur = '" . $member . "' and id_matiere = '" . $matiere . "')"), 0);
+                if ($test == 0) {
+                    $res = mysqli_query($GLOBALS["mysqli"], "INSERT into j_professeurs_matieres SET id_professeur = '" . $member . "', id_matiere = '" . $matiere . "'");
                 }
-              }
-            } else {
-              for ( $u = 0; $u < $info[$i]["member"]["count"] ; $u++ ) {
-                $member = preg_replace ("/^uid=([^,]+),ou=.*/" , "\\1", $info[$i]["member"][$u] );
-                if (trim($member) !="") {
-                    if ($list_member != "") $list_member .=", ";
-                    $list_member .=$member;
-                    $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM j_professeurs_matieres WHERE (id_professeur = '" . $member . "' and id_matiere = '" . $matiere . "')"), 0);
-                    if ($test == 0) {
-                        $res = mysqli_query($GLOBALS["mysqli"], "INSERT into j_professeurs_matieres SET id_professeur = '" . $member . "', id_matiere = '" . $matiere . "'");
-                    }
-                }
-              }
             }
-            echo "<tr><td>".$matiere."</td><td>".stripslashes($_POST['reg_nom_complet'][$matiere])."</td><td>".$list_member."</td></tr>\n";
+
         }
+
         // On efface les matières qui ne sont plus utilisées
-        echo "</table>";
+
         $to_remove = array_diff($matieres, $new_matieres);
 
         foreach($to_remove as $delete) {
@@ -179,12 +112,17 @@ if (isset($_POST['is_posted'])) {
             $res2 = mysqli_query($GLOBALS["mysqli"], "DELETE from j_professeurs_matieres WHERE id_matiere = '" . $delete . "'");
         }
 
+	// Ménage sur l'ordre des groupes dans l'affichage simplifié prof:
+	// Sinon, on peut se retrouver avec des rangs aberrants liés à des groupes qui n'existent plus dans la table groupes.
+	$sql="DELETE FROM preferences WHERE name LIKE 'accueil_simpl_id_groupe_order_%';";
+	$del=mysqli_query($GLOBALS["mysqli"], $sql);
+
         echo "<p>Opération effectuée.</p>";
         echo "<p>Vous pouvez vérifier l'importation en allant sur la page de <a href='../matieres/index.php'>gestion des matières</a>.</p>";
 
     } elseif ($_POST['record'] == "no") {
 
-            echo "<form action='disciplines.php' method='post' name='formulaire'>";
+            echo "<form enctype='multipart/form-data' action='disciplines.php' method=post name='formulaire'>";
 			echo add_token_field();
             echo "<input type=hidden name='record' value='yes'>";
             echo "<input type=hidden name='is_posted' value='yes'>";
@@ -198,26 +136,25 @@ if (isset($_POST['is_posted'])) {
             echo "<table border=1 cellpadding=2 cellspacing=2>";
             echo "<tr><td><p class=\"small\">Identifiant de la matière</p></td><td><p class=\"small\">Nom complet</p></td></tr>";
             for ($i=0;$i<$info["count"];$i++) {
-                $matiere=preg_replace("/Matiere_/","",$info[$i]["cn"][0]);
-                $description = $info[$i]["description"][0];
-                $test_exist = mysqli_query($GLOBALS["mysqli"], "SELECT * FROM matieres WHERE matiere='$matiere'");
+                $matiere = $info[$i]["cn"][0];
+                $matiere = traitement_magic_quotes(corriger_caracteres(trim($matiere)));
+                $nom_court = preg_replace("/[^A-Za-z0-9.\-]/","",strtoupper($matiere));
+                $nom_long = htmlspecialchars($matiere);
+                $test_exist = mysqli_query($GLOBALS["mysqli"], "SELECT * FROM matieres WHERE matiere='$nom_court'");
                 $nb_test_matiere_exist = mysqli_num_rows($test_exist);
 
                 if ($nb_test_matiere_exist==0) {
-                    $nom_complet = $description;
-                    $nom_court = "<font color=red>".$matiere."</font>";
+                    $disp_nom_court = "<font color=red>".$nom_court."</font>";
                 } else {
-                    $id_matiere = old_mysql_result($test_exist, 0, 'matiere');
-                    $nom_court = "<font color=green>".$matiere."</font>";
-                    $nom_complet = old_mysql_result($test_exist, 0, 'nom_complet');
+                    $disp_nom_court = "<font color=green>".$nom_court."</font>";
                 }
                 echo "<tr>";
                 echo "<td>";
-                echo "<p><b><center>$nom_court</center></b></p>";
+                echo "<p><b><center>$disp_nom_court</center></b></p>";
                 echo "";
                 echo "</td>";
                 echo "<td>";
-                echo "<input type=\"text\" size=\"40\" name='reg_nom_complet[$matiere]' value=\"".$nom_complet."\">\n";
+                echo "<input type=text name='reg_nom_complet[$nom_court]' value=\"".$nom_long."\">\n";
                 echo "</td></tr>";
             }
             echo "</table>\n";
@@ -231,7 +168,7 @@ if (isset($_POST['is_posted'])) {
     echo "<p><b>ATTENTION ...</b><br />";
     echo "<p>Si vous poursuivez la procédure les données telles que notes, appréciations, ... seront effacées.</p>";
     echo "<p>Seules la table contenant les matières et la table mettant en relation les matières et les professeurs seront conservées.</p>";
-    echo "<p>L'opération d'importation des matières depuis le LDAP de LCS va effectuer les opérations suivantes :</p>";
+    echo "<p>L'opération d'importation des matières depuis le LDAP de Scribe va effectuer les opérations suivantes :</p>";
     echo "<ul>";
     echo "<li>Ajout ou mise à jour de chaque matières présente dans le LDAP</li>";
     echo "<li>Association professeurs <-> matières</li>";
@@ -241,7 +178,7 @@ if (isset($_POST['is_posted'])) {
     echo "<input type=hidden name='is_posted' value='yes'>";
     echo "<input type=hidden name='record' value='no'>";
 
-    echo "<p>Etes-vous sûr de vouloir importer toutes les matières depuis l'annuaire du serveur LCS vers Gepi ?</p>";
+    echo "<p>Etes-vous sûr de vouloir continuer ?</p>";
     echo "<br/>";
     echo "<input type='submit' value='Je suis sûr'>";
     echo "</form>";

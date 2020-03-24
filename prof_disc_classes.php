@@ -29,426 +29,327 @@ require_once("../lib/initialisations.inc.php");
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-	die();
+    header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+    die();
 } else if ($resultat_session == '0') {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+    die();
 }
 
 if (!checkAccess()) {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+    die();
 }
 
 include("../lib/initialisation_annee.inc.php");
-$liste_tables_del = $liste_tables_del_etape_matieres;
+$liste_tables_del = $liste_tables_del_etape_professeurs;
 
 //**************** EN-TETE *****************
 $titre_page = "Outil d'initialisation de l'année : Importation des matières";
 require_once("../lib/header.inc.php");
 //************** FIN EN-TETE ***************
-
-$en_tete=isset($_POST['en_tete']) ? $_POST['en_tete'] : "no";
-
 ?>
-<p class="bold"><a href="index.php#prof_disc_classes"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour accueil initialisation</a></p>
+<p class='bold'><a href="index.php"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour accueil initialisation</a></p>
 <?php
 
-echo "<center><h3 class='gepi'>Sixième phase d'initialisation<br />Importation des associations profs-matières-classes (enseignements)</h3></center>\n";
+echo "<center><h3 class='gepi'>Quatrième phase d'initialisation<br />Importation des associations profs-matières-classes (enseignements)</h3></center>";
 
 
 if (!isset($_POST["action"])) {
-	//
-	// On sélectionne le fichier à importer
-	//
+    //
+    // On sélectionne le fichier à importer
+    //
 
-	if(isset($_SESSION['init_csv_ligne_entete'])&&($_SESSION['init_csv_ligne_entete']=="no")) {
-		$checked="";
-	}
-	else {
-		$checked=" checked";
-	}
-
-	echo "<p>Vous allez effectuer la sixième étape : elle consiste à importer le fichier <b>g_prof_disc_classes.csv</b> contenant les données relatives aux enseignements.</p>\n";
-	echo "<p><b>ATTENTION !</b> Avec cette opération, vous effacez tous les groupes d'enseignement qui avaient été définis l'année dernière. Ils seront écrasés par ceux que vous allez importer avec la procédure courante.</p>\n";
-	echo "<p>Les champs suivants doivent être présents, dans l'ordre, et <b>séparés par un point-virgule</b> : </p>\n";
-	echo "<ul><li>Login du professeur</li>\n" .
-			"<li>Nom court de la matière</li>\n" .
-			"<li>Le ou les identifiant(s) de classe (<em>séparés par un point d'exclamation ; ex : 1S1!1S2</em>)</li>\n" .
-			"<li>Type d'enseignement (<em>CG pour enseignement général suivi par toute la classe, OPT pour un enseignement optionnel</em>)</li>\n" .
-			"</ul>\n";
-	echo "<p>Exemple de ligne pour un enseignement général :<br />\n" .
-			"&nbsp;&nbsp;&nbsp;DUPONT.JEAN;MATHS;1S1;CG<br />\n" .
-			"Exemple de ligne pour un enseignement optionnel avec des élèves de plusieurs classes :<br />\n" .
-			"&nbsp;&nbsp;&nbsp;DURANT.PATRICE;ANGL2;1S1!1S2!1S3;OPT</p>\n";
-	echo "<p>Veuillez préciser le nom complet du fichier <b>g_prof_disc_classes.csv</b>.</p>\n";
-	echo "<form enctype='multipart/form-data' action='prof_disc_classes.php' method='post'>\n";
+    echo "<p>Vous allez effectuer la quatrième étape : elle consiste à importer le fichier <b>prof_disc_classes.csv</b> contenant les données relatives aux enseignements.";
+    echo "<p>ATTENTION ! Avec cette opération, vous effacez tous les groupes d'enseignement qui avaient été définis l'année dernière. Ils seront écrasés par ceux que vous allez importer avec la procédure courante.</p>";
+    echo "<p>Les champs suivants doivent être présents, dans l'ordre, et <b>séparés par un point-virgule</b> : ";
+    echo "<ul><li>Login du professeur</li>" .
+            "<li>Nom court de la matière</li>" .
+            "<li>Le ou les identifiant(s) de classe (séparés par un point d'exclamation ; ex : 1S1!1S2)</li>" .
+            "<li>Type d'enseignement (CG pour enseignement général suivi par toute la classe, OPT pour un enseignement optionnel)</li>" .
+            "</ul>";
+    echo "<p>Exemple de ligne pour un enseignement général :<br/>" .
+            "DUPONT.JEAN;MATHS;1S1;CG<br/>" .
+            "Exemple de ligne pour un enseignement optionnel avec des élèves de plusieurs classes :<br/>" .
+            "DURANT.PATRICE;ANGL2;1S1!1S2!1S3;OPT</p>";
+    echo "<p>Veuillez préciser le nom complet du fichier <b>prof_disc_classes.csv</b>.";
+    echo "<form enctype='multipart/form-data' action='prof_disc_classes.php' method='post'>";
 	echo add_token_field();
-	echo "<input type='hidden' name='action' value='upload_file' />\n";
-	echo "<p><input type=\"file\" size=\"80\" name=\"csv_file\" />\n";
-
-	echo "<p><label for='en_tete' style='cursor:pointer;'>Si le fichier à importer comporte une première ligne d'en-tête (<em>non vide</em>) à ignorer, <br />cocher la case ci-contre</label>&nbsp;<input type='checkbox' name='en_tete' id='en_tete' value='yes'$checked /></p>\n";
-
-	echo "<p><input type='submit' value='Valider' /></p>\n";
-	echo "</form>\n";
+    echo "<input type='hidden' name='action' value='upload_file' />";
+    echo "<p><input type=\"file\" size=\"80\" name=\"csv_file\" />";
+    echo "<p><input type='submit' value='Valider' />";
+    echo "</form>";
 
 } else {
-	//
-	// Quelque chose a été posté
-	//
-	if ($_POST['action'] == "save_data") {
-		check_token(false);
-		//
-		// On enregistre les données dans la base.
-		// Le fichier a déjà été affiché, et l'utilisateur est sûr de vouloir enregistrer
-		//
+	check_token(false);
+    //
+    // Quelque chose a été posté
+    //
+    if ($_POST['action'] == "save_data") {
+        //
+        // On enregistre les données dans la base.
+        // Le fichier a déjà été affiché, et l'utilisateur est sûr de vouloir enregistrer
+        //
 
-		echo "<p><em>On vide d'abord les tables suivantes&nbsp;:</em> ";
-		$j=0;
-		$k=0;
-		while ($j < count($liste_tables_del)) {
-			$sql="SHOW TABLES LIKE '".$liste_tables_del[$j]."';";
-			//echo "$sql<br />";
-			$test = sql_query1($sql);
-			if ($test != -1) {
-				if($k>0) {echo ", ";}
-				$sql="SELECT 1=1 FROM $liste_tables_del[$j];";
-				$res_test_tab=mysqli_query($GLOBALS["mysqli"], $sql);
-				if(mysqli_num_rows($res_test_tab)>0) {
-					$sql="DELETE FROM $liste_tables_del[$j];";
-					$del = @mysqli_query($GLOBALS["mysqli"], $sql);
-					echo "<b>".$liste_tables_del[$j]."</b>";
-					echo " (".mysqli_num_rows($res_test_tab).")";
-				}
-				else {
-					echo $liste_tables_del[$j];
-				}
-				$k++;
-			}
-			$j++;
-		}
-
-		// Ménage sur l'ordre des groupes dans l'affichage simplifié prof:
-		// Sinon, on peut se retrouver avec des rangs aberrants liés à des groupes qui n'existent plus dans la table groupes.
-		$sql="DELETE FROM preferences WHERE name LIKE 'accueil_simpl_id_groupe_order_%';";
-		$del=mysqli_query($GLOBALS["mysqli"], $sql);
-
-		$sql="SELECT * FROM tempo4;";
-		$res_tempo4=mysqli_query($GLOBALS["mysqli"], $sql);
-		if(mysqli_num_rows($res_tempo4)==0) {
-			echo "<p style='color:red'>ERREUR&nbsp;: Aucune association professeur/matière/classe/type n'a été trouvée&nbsp;???</p>\n";
-			echo "<p><br /></p>\n";
-			require("../lib/footer.inc.php");
-			die();
-		}
-
-		echo "<br />\n";
-		echo "<p><em>On remplit les tables 'matieres', 'groupes', 'j_groupes_matieres', 'j_groupes_professeurs', 'j_groupes_classes' et 'j_eleves_groupes'&nbsp;:</em> ";
-
-		$i = 0;
-		// Compteur d'erreurs
-		$error = 0;
-		// Compteur d'enregistrement
-		$total = 0;
-		while ($lig=mysqli_fetch_object($res_tempo4)) {
-			$reg_prof = $lig->col1;
-			$reg_matiere = $lig->col2;
-			$reg_classes = $lig->col3;
-			$reg_type = $lig->col4;
-
-			// On nettoie et on vérifie :
-			$reg_prof = preg_replace("/[^A-Za-z0-9._]/","",trim(my_strtoupper($reg_prof)));
-			if (mb_strlen($reg_prof) > 50) $reg_prof = mb_substr($reg_prof, 0, 50);
-
-			$reg_matiere = preg_replace("/[^A-Za-z0-9._\-]/","",trim(my_strtoupper($reg_matiere)));
-			if (mb_strlen($reg_matiere) > 50) $reg_matiere = mb_substr($reg_matiere, 0, 50);
-
-			$reg_classes = preg_replace("/[^A-Za-z0-9._ \-!]/","",trim($reg_classes));
-			if (mb_strlen($reg_classes) > 2000) $reg_classes = mb_substr($reg_classes, 0, 2000); // C'est juste pour éviter une tentative d'overflow...
-
-			$reg_type = preg_replace("/[^A-Za-z]/","",trim(my_strtoupper($reg_type)));
-			if ($reg_type != "CG" AND $reg_type != "OPT") $reg_type = "";
+        $j=0;
+        while ($j < count($liste_tables_del)) {
+            if (old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM $liste_tables_del[$j]"),0)!=0) {
+                $del = @mysqli_query($GLOBALS["mysqli"], "DELETE FROM $liste_tables_del[$j]");
+            }
+            $j++;
+        }
 
 
-			// Première étape : on s'assure que le prof existe. S'il n'existe pas, on laisse tomber.
-			$sql="SELECT count(login) FROM utilisateurs WHERE login = '" . $reg_prof . "';";
-			//echo "$sql<br />";
-			$test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], $sql),0);
-			if ($test == 1) {
+        $go = true;
+        $i = 0;
+        // Compteur d'erreurs
+        $error = 0;
+        // Compteur d'enregistrement
+        $total = 0;
+        // Warning matière, si jamais une matière est créée à la volée
+        $warning_matiere = false;
+        while ($go) {
 
-				// Le prof existe. cool. Maintenant on récupère la matière.
-				//$sql="SELECT nom_complet FROM matieres WHERE matiere = '" . mysqli_real_escape_string($GLOBALS["mysqli"], $reg_matiere) . "'";
-				$sql="SELECT nom_complet FROM matieres WHERE matiere = '" . $reg_matiere . "'";
-				//echo "$sql<br />";
-				$test = mysqli_query($GLOBALS["mysqli"], $sql);
+            $reg_prof = $_POST["ligne".$i."_prof"];
+            $reg_matiere = $_POST["ligne".$i."_matiere"];
+            $reg_classes = $_POST["ligne".$i."_classes"];
+            $reg_type = $_POST["ligne".$i."_type"];
 
-				if (mysqli_num_rows($test) == 1) {
-					// La matière existe
-					// On récupère le nom complet de la matière
-					$reg_matiere_complet = old_mysql_result($test, 0, "nom_complet");
+            // On nettoie et on vérifie :
+            $reg_prof = preg_replace("/[^A-Za-z0-9\._]/","",trim(mb_strtoupper($reg_prof)));
+            if (mb_strlen($reg_prof) > 50) $reg_prof = mb_substr($reg_prof, 0, 50);
 
-					// Maintenant on en arrive aux classes
-					// On récupère un tableau :
-					$reg_classes = explode("!", $reg_classes);
+            $reg_matiere = preg_replace("/[^A-Za-z0-9\.\-]/","",trim(mb_strtoupper($reg_matiere)));
+            if (mb_strlen($reg_matiere) > 50) $reg_matiere = mb_substr($reg_matiere, 0, 50);
 
-					// On détermine le type de groupe
-					if (count($reg_classes) > 1) {
-						// On force le type "OPT" s'il y a plusieurs classes
-						$reg_type = "OPT";
-					} else {
-						if ($reg_type == "") {
-							// Si on n'a qu'une seule classe et que rien n'est spécifié, on a par défaut
-							// un cours général
-							$reg_type = "CG";
-						}
-					}
+            $reg_classes = preg_replace("/[^A-Za-z0-9\.\-!]/","",trim($reg_classes));
+            if (mb_strlen($reg_classes) > 2000) $reg_classes = mb_substr($reg_classes, 0, 2000); // C'est juste pour éviter une tentative d'overflow...
 
-					// Si on arrive ici, c'est que normalement tout est bon.
-					// On va quand même s'assurer qu'on a des classes valides.
+            // On ne garde véritablement que les types CG et OPT. En effet la génération par Scribe
+            // est supposée n'intégrer que ces deux types.
+            if ($reg_type != "CG" AND $reg_type != "OPT") $reg_type = false;
 
-					$valid_classes = array();
-					foreach ($reg_classes as $classe) {
-						$sql="SELECT id FROM classes WHERE classe = '" . $classe . "'";
-						//echo "$sql<br />";
-						$test = mysqli_query($GLOBALS["mysqli"], $sql);
-						if (mysqli_num_rows($test) == 1) $valid_classes[] = old_mysql_result($test, 0, "id");
-					}
+            if ($reg_type) {
 
-					if (count($valid_classes) > 0) {
-						// C'est bon, on a au moins une classe valide. On peut créer le groupe !
+                // Première étape : on s'assure que le prof existe. S'il n'existe pas, on laisse tomber.
+                $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(login) FROM utilisateurs WHERE login = '" . $reg_prof . "'"),0);
+                if ($test == 1) {
 
-						$sql="INSERT INTO groupes SET name = '" . $reg_matiere . "', description = '" . mysqli_real_escape_string($GLOBALS["mysqli"], html_entity_decode($reg_matiere_complet)) . "'";
-						//echo "$sql<br />";
-						$new_group = mysqli_query($GLOBALS["mysqli"], $sql);
-						$group_id = ((is_null($___mysqli_res = mysqli_insert_id($GLOBALS["mysqli"]))) ? false : $___mysqli_res);
-						if (!$new_group) {
-							echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-						}
-						// Le groupe est créé. On associe la matière.
-						$sql="INSERT INTO j_groupes_matieres SET id_groupe = '".$group_id."', id_matiere = '" . $reg_matiere . "'";
-						//echo "$sql<br />";
-						$res = mysqli_query($GLOBALS["mysqli"], $sql);
-						if (!$res) {
-							echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-						}
-						// On associe le prof
-						$sql="INSERT INTO j_groupes_professeurs SET id_groupe = '" . $group_id . "', login = '" . $reg_prof . "'";
-						//echo "$sql<br />";
-						$res = mysqli_query($GLOBALS["mysqli"], $sql);
-						if (!$res) {
-							echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-						}
-						// On associe la matière au prof
-						$sql="INSERT INTO j_professeurs_matieres SET id_professeur = '" . $reg_prof . "', id_matiere = '" . $reg_matiere . "'";
-						//echo "$sql<br />";
-						$res = mysqli_query($GLOBALS["mysqli"], $sql);
-						// On associe le groupe aux classes (ou à la classe)
-						foreach ($valid_classes as $classe_id) {
-							$sql="INSERT INTO j_groupes_classes SET id_groupe = '" . $group_id . "', id_classe = '" . $classe_id ."'";
-							//echo "$sql<br />";
-							$res = mysqli_query($GLOBALS["mysqli"], $sql);
-							if (!$res) {
-								echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-							}
-						}
+                    // Le prof existe. cool. Maintenant on récupère la matière.
+                    $test = mysqli_query($GLOBALS["mysqli"], "SELECT nom_complet FROM matieres WHERE matiere = '" . $reg_matiere . "'");
 
-						// Si le type est à "CG", on associe les élèves de la classe au groupe
-						if ($reg_type == "CG") {
+                    if (mysqli_num_rows($test) == 0) {
+                        // La matière n'existe pas, on la créé
+                        $res = mysqli_query($GLOBALS["mysqli"], "INSERT INTO matieres SET matiere = '" . $reg_matiere . "', nom_complet = '" . $reg_matiere . "',priority='0',matiere_aid='n',matiere_atelier='n'");
+                        $reg_matiere_complet = $reg_matiere;
+                        $warning_matiere = true;
+                    } else {
+                        $reg_matiere_complet = old_mysql_result($test, 0, "nom_complet");
+                    }
 
-							// On récupère le nombre de périodes pour la classe
-							$sql="SELECT count(num_periode) FROM periodes WHERE id_classe = '" . $valid_classes[0] . "'";
-							//echo "$sql<br />";
-							$periods = old_mysql_result(mysqli_query($GLOBALS["mysqli"], $sql), 0);
-							$sql="SELECT DISTINCT(login) FROM j_eleves_classes WHERE id_classe = '" . $valid_classes[0] . "'";
-							//echo "$sql<br />";
-							$get_eleves = mysqli_query($GLOBALS["mysqli"], $sql);
-							$nb = mysqli_num_rows($get_eleves);
-							for ($e=0;$e<$nb;$e++) {
-								$current_eleve = old_mysql_result($get_eleves, $e, "login");
-								for ($p=1;$p<=$periods;$p++) {
-									$sql="INSERT INTO j_eleves_groupes SET login = '" . $current_eleve . "', id_groupe = '" . $group_id . "', periode = '" . $p . "'";
-									//echo "$sql<br />";
-									$res = mysqli_query($GLOBALS["mysqli"], $sql);
-									if (!$res) {
-										echo "<span style='color:red'>".mysqli_error($GLOBALS["mysqli"]).'<span><br />';
-									}
-								}
-							}
-						}
+                    // Maintenant on en arrive aux classes
+                    // On récupère un tableau :
+                    $reg_classes = explode("!", $reg_classes);
 
-						if (!$new_group) {
-							$error++;
-						} else {
-							$total++;
-						}
-					} // -> Fin du test si on a au moins une classe valide
-				} // -> Fin du test où la matière existe
+                    // On détermine le type de groupe
+                    if (count($reg_classes) > 1) {
+                        // On force le type "OPT" s'il y a plusieurs classes
+                        $reg_type = "OPT";
+                    } else {
+                        if ($reg_type == "") {
+                            // Si on n'a qu'une seule classe et que rien n'est spécifié, on a par défaut
+                            // un cours général
+                            $reg_type = "CG";
+                        }
+                    }
 
-			} // -> Fin du test où le prof existe
+                    // Si on arrive ici, c'est que normalement tout est bon.
+                    // On va quand même s'assurer qu'on a des classes valides.
 
-			$i++;
-		}
+                    $valid_classes = array();
+                    foreach ($reg_classes as $classe) {
+                        $test = mysqli_query($GLOBALS["mysqli"], "SELECT id FROM classes WHERE classe = '" . $classe . "'");
+                        if (mysqli_num_rows($test) == 1) $valid_classes[] = old_mysql_result($test, 0, "id");
+                    }
 
-		echo "<p>Opération terminée.</p>\n";
-		if ($error > 0) echo "<p style='color:red'>Il y a eu " . $error . " erreurs.</p>\n";
-		if ($total > 0) echo "<p>" . $total . " groupes ont été enregistrés.</p>\n";
+                    if (count($valid_classes) > 0) {
+                        // C'est bon, on a au moins une classe valide. On peut créer le groupe !
 
-		echo "<p><a href='index.php#prof_disc_classes'>Revenir à la page précédente</a></p>\n";
+                        $new_group = mysqli_query($GLOBALS["mysqli"], "INSERT INTO groupes SET name = '" . $reg_matiere . "', description = '" . $reg_matiere_complet . "'");
+                        $group_id = ((is_null($___mysqli_res = mysqli_insert_id($GLOBALS["mysqli"]))) ? false : $___mysqli_res);
+                        if (!$new_group) echo mysqli_error($GLOBALS["mysqli"]);
+                        // Le groupe est créé. On associe la matière.
+                        $res = mysqli_query($GLOBALS["mysqli"], "INSERT INTO j_groupes_matieres SET id_groupe = '".$group_id."', id_matiere = '" . $reg_matiere . "'");
+                        if (!$res) echo mysqli_error($GLOBALS["mysqli"]);
+                        // On associe le prof
+                        $res = mysqli_query($GLOBALS["mysqli"], "INSERT INTO j_groupes_professeurs SET id_groupe = '" . $group_id . "', login = '" . $reg_prof . "'");
+                        if (!$res) echo mysqli_error($GLOBALS["mysqli"]);
+                        // On associe la matière au prof
+                        $res = mysqli_query($GLOBALS["mysqli"], "INSERT INTO j_professeurs_matieres SET id_professeur = '" . $reg_prof . "', id_matiere = '" . $reg_matiere . "'");
+                        // On associe le groupe aux classes (ou à la classe)
+                        foreach ($valid_classes as $classe_id) {
+                            $res = mysqli_query($GLOBALS["mysqli"], "INSERT INTO j_groupes_classes SET id_groupe = '" . $group_id . "', id_classe = '" . $classe_id ."'");
+                            if (!$res) echo mysqli_error($GLOBALS["mysqli"]);
+                        }
 
+                        // Si le type est à "CG", on associe les élèves de la classe au groupe
+                        if ($reg_type == "CG") {
 
-	} else if ($_POST['action'] == "upload_file") {
-		check_token(false);
-		//
-		// Le fichier vient d'être envoyé et doit être traité
-		// On va donc afficher le contenu du fichier tel qu'il va être enregistré dans Gepi
-		// en proposant des champs de saisie pour modifier les données si on le souhaite
-		//
+                            // On récupère le nombre de périodes pour la classe
+                            $periods = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(num_periode) FROM periodes WHERE id_classe = '" . $valid_classes[0] . "'"), 0);
+                            $get_eleves = mysqli_query($GLOBALS["mysqli"], "SELECT DISTINCT(login) FROM j_eleves_classes WHERE id_classe = '" . $valid_classes[0] . "'");
+                            $nb = mysqli_num_rows($get_eleves);
+                            for ($e=0;$e<$nb;$e++) {
+                                $current_eleve = old_mysql_result($get_eleves, $e, "login");
+                                for ($p=1;$p<=$periods;$p++) {
+                                    $res = mysqli_query($GLOBALS["mysqli"], "INSERT INTO j_eleves_groupes SET login = '" . $current_eleve . "', id_groupe = '" . $group_id . "', periode = '" . $p . "'");
+                                    if (!$res) echo mysqli_error($GLOBALS["mysqli"]);
+                                }
+                            }
+                        }
 
-		if(isset($en_tete)) {
-			$_SESSION['init_csv_ligne_entete']=$en_tete;
-		}
+                        if (!$new_group) {
+                            $error++;
+                        } else {
+                            $total++;
+                        }
+                    } // -> Fin du test si on a au moins une classe valide
 
-		$csv_file = isset($_FILES["csv_file"]) ? $_FILES["csv_file"] : NULL;
+                } // -> Fin du test où le prof existe
+            }
 
-		// On vérifie le nom du fichier... Ce n'est pas fondamentalement indispensable, mais
-		// autant forcer l'utilisateur à être rigoureux
-		if(my_strtolower($csv_file['name']) == "g_prof_disc_classes.csv") {
+            $i++;
+            if (!isset($_POST['ligne'.$i.'_prof'])) $go = false;
+        }
 
-			// Le nom est ok. On ouvre le fichier
-			$fp=fopen($csv_file['tmp_name'],"r");
-
-			if(!$fp) {
-				// Aie : on n'arrive pas à ouvrir le fichier... Pas bon.
-				echo "<p>Impossible d'ouvrir le fichier CSV !</p>\n";
-				echo "<p><a href='prof_disc_classes.php'>Cliquer ici </a> pour recommencer !</p>\n";
-			} else {
-
-				// Fichier ouvert ! On attaque le traitement
-
-				// On va stocker toutes les infos dans un tableau
-				// Une ligne du CSV pour une entrée du tableau
-				$data_tab = array();
-
-				//=========================
-				// On lit une ligne pour passer la ligne d'entête:
-				if($en_tete=="yes") {
-					$ligne = fgets($fp, 4096);
-					echo "<p>A titre d'information, la ligne d'entête passée est la suivante&nbsp;:<br />
-					<span style='color:green'>$ligne</span><br />
-					Si il ne s'agit pas d'une ligne d'entête, vous pouvez <a href='".$_SERVER['PHP_SELF']."'>refaire cette étape</a>.</p>";
-				}
-				//=========================
-
-				$k = 0;
-				while (!feof($fp)) {
-					$ligne = fgets($fp, 4096);
-					if(trim($ligne)!="") {
-
-						$tabligne=explode(";",$ligne);
-
-						// 0 : Login du prof
-						// 1 : nom court de la matière
-						// 2 : identifiant(s) de là (des) classe(s) (Format : 1S1!1S2!1S3)
-						// 3 : type de groupe (CG || OPT)
+        if ($error > 0) echo "<p><font color=red>Il y a eu " . $error . " erreurs.</font></p>";
+        if ($total > 0) echo "<p>" . $total . " groupes ont été enregistrés.</p>";
+        if ($warning_matiere) echo "<p><font color=red>Attention !</font> Des matières ont été créées à la volée lors de l'importation. Leur nom complet n'a pu être déterminé. Vous devez donc vous rendre sur la page de <a href='../matieres/index.php'>gestion des matières</a> pour les renommer.</p>";
+        echo "<p><a href='index.php'>Revenir à la page précédente</a></p>";
 
 
-						// On nettoie et on vérifie :
-						$tabligne[0] = preg_replace("/[^A-Za-z0-9._]/","",trim(my_strtoupper($tabligne[0])));
-						if (mb_strlen($tabligne[0]) > 50) $tabligne[0] = mb_substr($tabligne[0], 0, 50);
-			
-						$tabligne[1] = preg_replace("/[^A-Za-z0-9._\-]/","",trim(my_strtoupper($tabligne[1])));
-						if (mb_strlen($tabligne[1]) > 50) $tabligne[1] = mb_substr($tabligne[1], 0, 50);
-			
-						$tabligne[2] = preg_replace("/[^A-Za-z0-9._ \-!]/","",trim($tabligne[2]));
-						if (mb_strlen($tabligne[2]) > 2000) $tabligne[2] = mb_substr($tabligne[2], 0, 2000);
-			
-						$tabligne[3] = preg_replace("/[^A-Za-z]/","",trim(my_strtoupper($tabligne[3])));
-						if ($tabligne[3] != "CG" AND $tabligne[3] != "OPT") $tabligne[3] = "";
+    } else if ($_POST['action'] == "upload_file") {
+        //
+        // Le fichier vient d'être envoyé et doit être traité
+        // On va donc afficher le contenu du fichier tel qu'il va être enregistré dans Gepi
+        // en proposant des champs de saisie pour modifier les données si on le souhaite
+        //
 
-						$data_tab[$k] = array();
+        $csv_file = isset($_FILES["csv_file"]) ? $_FILES["csv_file"] : NULL;
 
-						$data_tab[$k]["prof"] = $tabligne[0];
-						$data_tab[$k]["matiere"] = $tabligne[1];
-						$data_tab[$k]["classes"] = $tabligne[2];
-						$data_tab[$k]["type"] = $tabligne[3];
-					}
-					$k++;
-				}
+        // On vérifie le nom du fichier... Ce n'est pas fondamentalement indispensable, mais
+        // autant forcer l'utilisateur à être rigoureux
+        if(mb_strtolower($csv_file['name']) == "prof_disc_classes.csv") {
 
-				fclose($fp);
+            // Le nom est ok. On ouvre le fichier
+            $fp=fopen($csv_file['tmp_name'],"r");
 
-				// Fin de l'analyse du fichier.
-				// Maintenant on va afficher tout ça.
+            if(!$fp) {
+                // Aie : on n'arrive pas à ouvrir le fichier... Pas bon.
+                echo "<p>Impossible d'ouvrir le fichier CSV !</p>";
+                echo "<p><a href='prof_disc_classes.php'>Cliquer ici </a> pour recommencer !</center></p>";
+            } else {
 
-				$nb_error=0;
+                // Fichier ouvert ! On attaque le traitement
 
-				$sql="CREATE TABLE IF NOT EXISTS tempo4 ( col1 varchar(100) NOT NULL default '', col2 varchar(100) NOT NULL default '', col3 varchar(100) NOT NULL default '', col4 varchar(100) NOT NULL default '');";
-				$res_tempo4=mysqli_query($GLOBALS["mysqli"], $sql);
+                // On va stocker toutes les infos dans un tableau
+                // Une ligne du CSV pour une entrée du tableau
+                $data_tab = array();
 
-				$sql="TRUNCATE tempo4;";
-				$res_tempo4=mysqli_query($GLOBALS["mysqli"], $sql);
+                //=========================
+                // On lit une ligne pour passer la ligne d'entête:
+                $ligne = fgets($fp, 4096);
+                //=========================
 
-				echo "<form enctype='multipart/form-data' action='prof_disc_classes.php' method='post'>\n";
+                    $k = 0;
+                    while (!feof($fp)) {
+                        $ligne = fgets($fp, 4096);
+                        if(trim($ligne)!="") {
+
+                            $tabligne=explode(";",$ligne);
+
+                            // 0 : Login du prof
+                            // 1 : nom court de la matière
+                            // 2 : identifiant(s) de là (des) classe(s) (Format : 1S1!1S2!1S3)
+                            // 3 : type de groupe (CG || OPT)
+
+
+            // On nettoie et on vérifie :
+            $tabligne[0] = preg_replace("/[^A-Za-z0-9\._]/","",trim(mb_strtoupper($tabligne[0])));
+            if (mb_strlen($tabligne[0]) > 50) $tabligne[0] = mb_substr($tabligne[0], 0, 50);
+
+            $tabligne[1] = preg_replace("/[^A-Za-z0-9\.\-]/","",trim(mb_strtoupper($tabligne[1])));
+            if (mb_strlen($tabligne[1]) > 50) $tabligne[1] = mb_substr($tabligne[1], 0, 50);
+
+            $tabligne[2] = preg_replace("/[^A-Za-z0-9\.\-!]/","",trim($tabligne[2]));
+            if (mb_strlen($tabligne[2]) > 2000) $tabligne[2] = mb_substr($tabligne[2], 0, 2000);
+
+            $tabligne[3] = preg_replace("/[^A-Za-z]/","",trim(mb_strtoupper($tabligne[3])));
+
+            if ($tabligne[3] != "CG" AND $tabligne[3] != "OPT") $tabligne[3] = "";
+
+
+
+                            $data_tab[$k] = array();
+
+                            $data_tab[$k]["prof"] = $tabligne[0];
+                            $data_tab[$k]["matiere"] = $tabligne[1];
+                            $data_tab[$k]["classes"] = $tabligne[2];
+                            $data_tab[$k]["type"] = $tabligne[3];
+                        }
+                    $k++;
+                    }
+
+                fclose($fp);
+
+                // Fin de l'analyse du fichier.
+                // Maintenant on va afficher tout ça.
+
+                echo "<form enctype='multipart/form-data' action='prof_disc_classes.php' method='post'>";
 				echo add_token_field();
-				echo "<input type='hidden' name='action' value='save_data' />\n";
-				echo "<table border='1' class='boireaus' summary='Prof/matière/classe/type'>\n";
-				echo "<tr><th>Login prof</th><th>Matière</th><th>Classe(s)</th><th>Type</th></tr>\n";
+                echo "<input type='hidden' name='action' value='save_data' />";
+                echo "<table>";
+                echo "<tr><td>Login prof</td><td>Matière</td><td>Classe(s)</td><td>Type</td></tr>";
 
-				$alt=1;
-				for ($i=0;$i<$k-1;$i++) {
-					$alt=$alt*(-1);
-					echo "<tr class='lig$alt'>\n";
-					echo "<td>\n";
-					$sql="INSERT INTO tempo4 SET col1='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["prof"])."',
-					col2='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["matiere"])."',
-					col3='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["classes"])."',
-					col4='".mysqli_real_escape_string($GLOBALS["mysqli"], $data_tab[$i]["type"])."';";
-					$insert=mysqli_query($GLOBALS["mysqli"], $sql);
-					if(!$insert) {
-						echo "<span style='color:red'>";
-						echo $data_tab[$i]["prof"];
- 						echo "</span>";
-						$nb_error++;
-					}
-					else {
-						echo $data_tab[$i]["prof"];
-					}
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["matiere"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["classes"];
-					echo "</td>\n";
-					echo "<td>\n";
-					echo $data_tab[$i]["type"];
-					echo "</td>\n";
-					echo "</tr>\n";
-				}
+                for ($i=0;$i<$k-1;$i++) {
 
-				echo "</table>\n";
+                        echo "<tr>";
+                        echo "<td>";
+                        echo $data_tab[$i]["prof"];
+                        echo "<input type='hidden' name='ligne".$i."_prof' value='" . $data_tab[$i]["prof"] . "'>";
+                        echo "</td>";
+                        echo "<td>";
+                        echo $data_tab[$i]["matiere"];
+                        echo "<input type='hidden' name='ligne".$i."_matiere' value='" . $data_tab[$i]["matiere"] . "'>";
+                        echo "</td>";
+                        echo "<td>";
+                        echo $data_tab[$i]["classes"];
+                        echo "<input type='hidden' name='ligne".$i."_classes' value='" . $data_tab[$i]["classes"] . "'>";
+                        echo "</td>";
+                        echo "<td>";
+                        echo $data_tab[$i]["type"];
+                        echo "<input type='hidden' name='ligne".$i."_type' value='" . $data_tab[$i]["type"] . "'>";
+                        echo "</td>";
+                        echo "</tr>";
+                }
 
-				if($nb_error>0) {
-					echo "<p><span style='color:red'>$nb_error erreur(s) détectée(s) lors de la préparation.</span></p>\n";
-				}
+                echo "</table>";
 
-				echo "<p><input type='submit' value='Enregistrer' /></p>\n";
+                echo "<input type='submit' value='Enregistrer'>";
 
-				echo "</form>\n";
-			}
+                echo "</form>";
+            }
 
-		} else if (trim($csv_file['name'])=='') {
+        } else if (trim($csv_file['name'])=='') {
 
-			echo "<p>Aucun fichier n'a été sélectionné !<br />\n";
-			echo "<a href='prof_disc_classes.php'>Cliquer ici </a> pour recommencer !</p>\n";
+            echo "<p>Aucun fichier n'a été sélectionné !<br />";
+            echo "<a href='prof_disc_classes.php'>Cliquer ici </a> pour recommencer !</center></p>";
 
-		} else {
-			echo "<p>Le fichier sélectionné n'est pas valide !<br />\n";
-			echo "<a href='prof_disc_classes.php'>Cliquer ici </a> pour recommencer !</p>\n";
-		}
-	}
+        } else {
+            echo "<p>Le fichier sélectionné n'est pas valide !<br />";
+            echo "<a href='prof_disc_classes.php'>Cliquer ici </a> pour recommencer !</center></p>";
+        }
+    }
 }
-echo "<p><br /></p>\n";
 require("../lib/footer.inc.php");
 ?>

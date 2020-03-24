@@ -1,4 +1,5 @@
 <?php
+
 /*
  *
  * Copyright 2001, 2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
@@ -25,24 +26,25 @@ require_once("../lib/initialisations.inc.php");
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-    header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-    die();
+	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+	die();
 } else if ($resultat_session == '0') {
-    header("Location: ../logout.php?auto=1");
-    die();
+	header("Location: ../logout.php?auto=1");
+	die();
 }
 
 if (!checkAccess()) {
-    header("Location: ../logout.php?auto=1");
-    die();
+	header("Location: ../logout.php?auto=1");
+	die();
 }
 
 //**************** EN-TETE *****************
-$titre_page = "Outil d'initialisation de l'année pour les serveurs LCS";
+$titre_page = "Outil d'initialisation de l'année";
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
 ?>
-<p class='bold'><a href="../gestion/index.php#init_lcs"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a></p>
+<p class='bold'><a href="../gestion/index.php"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a></p>
+
 <p><strong>Vous allez effectuer l'initialisation de l'année scolaire qui vient de débuter.</strong><br />
 (<em>c'est une opération que vous ne devez effectuer qu'<span style='color:red'>une seule fois par an</span>.<br />
 <?php
@@ -55,15 +57,17 @@ require_once("../lib/header.inc.php");
 	}
 ?>
 <br />
+
 <?php
 	echo "<p>Avez-vous pensé à effectuer les différentes opérations de fin d'année et préparation de nouvelle année à la page <a href='../gestion/changement_d_annee.php' style='font-weight:bold;'>Changement d'année</a>&nbsp?</p>\n";
 ?>
+
 <ul>
-<li>Au cours de la procédure, le cas échéant, certaines données de l'année passée seront définitivement effacées de la base GEPI (<em>élèves, notes, appréciations,...</em>). Seules seront conservées les données suivantes :<br /><br />
+<li>Au cours de la procédure, le cas échéant, certaines données de l'année passée seront définitivement effacées de la base GEPI (élèves, notes, appréciations, ...) . Seules seront conservées les données suivantes :<br /><br />
 - les données relatives aux établissements,<br />
 - les données relatives aux classes : intitulés courts, intitulés longs, nombre de périodes et noms des périodes,<br />
 - les données relatives aux matières : identifiants et intitulés complets,<br />
-- les données relatives aux utilisateurs (<em>professeurs, administrateurs,...</em>). Concernant les professeurs, les matières enseignées par les professeurs sont conservées,<br />
+- les données relatives aux utilisateurs (professeurs, administrateurs, ...). Concernant les professeurs, les matières enseignées par les professeurs sont conservées,<br />
 - Les données relatives aux différents types d'AID.</li><br />
 
 <li>L'initialisation s'effectue en différentes phases :<br />
@@ -73,9 +77,11 @@ require_once("../lib/header.inc.php");
     <br />
     <li><a href='professeurs.php'>Procéder à la deuxième phase</a> d'importation des professeurs.</li>
     <br />
-    <li><a href='disciplines.php'>Procéder à la troisième phase</a> d'importation des matières et d'affectation de ce matières aux professeurs.</li>
+    <li><a href='disciplines.php'>Procéder à la troisième phase</a> d'importation des matières et d'affectation de ces matières aux professeurs.</li>
     <br />
-    <li><a href='affectations.php'>Procéder à la quatrième phase</a> d'affectation des matières et des professeurs aux classes.</li>
+    <li><a href='prof_disc_classes.php'>Procéder à la quatrième phase</a> d'affectation des professeurs aux classes et à la création des groupes d'enseignement.</li>
+    <br />
+    <li><a href='eleves_options.php'>Procéder à la cinquième phase</a> d'affection des élèves aux enseignements optionnels.</li>
     <br />
     <br />
 </li>
