@@ -1,12 +1,12 @@
 <?php
 /**
- * Gestion des bulletins
+ * Gestion des EDT ical
  * 
  * $_POST['activer'] activation/désactivation
  * $_POST['is_posted']
  * 
  *
- * @copyright Copyright 2001, 2013 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ * @copyright Copyright 2001, 2014 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun, Stephane Boireau
  * @license GNU/GPL, 
  * @package Carnet_de_notes
  * @subpackage administration
@@ -33,7 +33,7 @@
  */
 
 $accessibilite="y";
-$titre_page = "Gestion module bulletins";
+$titre_page = "Gestion module EDT ical";
 $niveau_arbo = 1;
 $gepiPathJava="./..";
 
@@ -51,6 +51,23 @@ if ($resultat_session == 'c') {
 	die();
 }
 
+$sql="SELECT 1=1 FROM droits WHERE id='/edt/index_admin.php';";
+$test=mysqli_query($GLOBALS["mysqli"], $sql);
+if(mysqli_num_rows($test)==0) {
+$sql="INSERT INTO droits SET id='/edt/index_admin.php',
+administrateur='V',
+professeur='F',
+cpe='F',
+scolarite='F',
+eleve='F',
+responsable='F',
+secours='F',
+autre='F',
+description='EDT ICAL : Administration',
+statut='';";
+$insert=mysqli_query($GLOBALS["mysqli"], $sql);
+}
+
 // Check access
 if (!checkAccess()) {
 	header("Location: ../logout.php?auto=1");
@@ -63,133 +80,108 @@ if (!checkAccess()) {
 $msg = '';
 $post_reussi=FALSE;
 
-if(isset($_POST['is_posted'])) {
+//debug_var();
+
+if((isset($_POST['is_posted']))&&($_POST['is_posted']==1)) {
 	check_token();
 
 	if (isset($_POST['activer'])) {
-		if (!saveSetting("active_bulletins", $_POST['activer'])) $msg = "Erreur lors de l'enregistrement du paramètre activation/désactivation !";
+		if (!saveSetting("active_edt_ical", $_POST['activer'])) $msg = "Erreur lors de l'enregistrement du paramètre activation/désactivation !";
+	}
+}
+
+if((isset($_POST['is_posted']))&&($_POST['is_posted']==2)) {
+	check_token();
+
+	if(isset($_POST['EdtIcalProf'])) {
+		if (!saveSetting("EdtIcalProf", "yes")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalProf !";
+		}
+	}
+	else {
+		if (!saveSetting("EdtIcalProf", "no")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalProf !";
+		}
 	}
 
-	if (isset($_POST['vider_absences_bulletins'])) {
-		$sql="DELETE FROM absences;";
-		$nettoyage=mysqli_query($GLOBALS["mysqli"], $sql);
-		if (!$nettoyage) {$msg = "Erreur lors du \"vidage\" de la table 'absences'.";} else {$msg = "La table 'absences' a été vidée.";}
+	if(isset($_POST['EdtIcalProfTous'])) {
+		if (!saveSetting("EdtIcalProfTous", "yes")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalProfTous !";
+		}
+	}
+	else {
+		if (!saveSetting("EdtIcalProfTous", "no")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalProfTous !";
+		}
 	}
 
-	if($_POST['is_posted']=="param_divers") {
-		if (isset($_POST['bullNoMoyGenParDefaut'])) {
-			if(!saveSetting('bullNoMoyGenParDefaut', "yes")) {
-				$msg.="Erreur lors de l'enregistrement de 'bullNoMoyGenParDefaut'.<br />";
-			}
+	if(isset($_POST['EdtIcalEleve'])) {
+		if (!saveSetting("EdtIcalEleve", "yes")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalEleve !";
 		}
-		else {
-			if(!saveSetting('bullNoMoyGenParDefaut', "no")) {
-				$msg.="Erreur lors de l'enregistrement de 'bullNoMoyGenParDefaut'.<br />";
-			}
+	}
+	else {
+		if (!saveSetting("EdtIcalEleve", "no")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalEleve !";
 		}
+	}
 
-		if (isset($_POST['bullNoMoyCatParDefaut'])) {
-			if(!saveSetting('bullNoMoyCatParDefaut', "yes")) {
-				$msg.="Erreur lors de l'enregistrement de 'bullNoMoyCatParDefaut'.<br />";
-			}
+	if(isset($_POST['EdtIcalResponsable'])) {
+		if (!saveSetting("EdtIcalResponsable", "yes")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalResponsable !";
 		}
-		else {
-			if(!saveSetting('bullNoMoyCatParDefaut', "no")) {
-				$msg.="Erreur lors de l'enregistrement de 'bullNoMoyCatParDefaut'.<br />";
-			}
-		}
-
-		if (isset($_POST['bullNoSaisieElementsProgrammes'])) {
-			if(!saveSetting('bullNoSaisieElementsProgrammes', "yes")) {
-				$msg.="Erreur lors de l'enregistrement de 'bullNoSaisieElementsProgrammes'.<br />";
-			}
-		}
-		else {
-			if(!saveSetting('bullNoSaisieElementsProgrammes', "no")) {
-				$msg.="Erreur lors de l'enregistrement de 'bullNoSaisieElementsProgrammes'.<br />";
-			}
-		}
-
-
-		if (isset($_POST['insert_mass_appreciation_type'])) {
-			if(!saveSetting('insert_mass_appreciation_type', "y")) {
-				$msg.="Erreur lors de l'enregistrement de 'insert_mass_appreciation_type'.<br />";
-			}
-		}
-		else {
-			if(!saveSetting('insert_mass_appreciation_type', "n")) {
-				$msg.="Erreur lors de l'enregistrement de 'insert_mass_appreciation_type'.<br />";
-			}
-		}
-
-		$sql="DELETE FROM b_droits_divers WHERE nom_droit='insert_mass_appreciation_type';";
-		$del=mysqli_query($mysqli, $sql);
-		$nb_mass=0;
-		$login_user_mass_app=isset($_POST['login_user_mass_app']) ? $_POST['login_user_mass_app'] : array();
-		for($loop=0;$loop<count($login_user_mass_app);$loop++) {
-			$sql="INSERT INTO b_droits_divers SET nom_droit='insert_mass_appreciation_type', valeur_droit='y', login='".$login_user_mass_app[$loop]."';";
-			$insert=mysqli_query($mysqli, $sql);
-			if(!$insert) {
-				$msg.="Erreur lors de l'enregistrement du droit insert_mass_appreciation_type pour ".civ_nom_prenom($login_user_mass_app[$loop]).".<br />";
-			}
-			else {
-				$nb_mass++;
-			}
-		}
-		if($nb_mass>0) {
-			$msg.="$nb_mass droit(s) insert_mass_appreciation_type enregistré(s).<br />";
-		}
-
-		$sql="DELETE FROM b_droits_divers WHERE nom_droit='insert_mass_appreciation_type_d_apres_moyenne';";
-		$del=mysqli_query($mysqli, $sql);
-		$nb_mass=0;
-		$login_user_mass_app_moy=isset($_POST['login_user_mass_app_moy']) ? $_POST['login_user_mass_app_moy'] : array();
-		for($loop=0;$loop<count($login_user_mass_app_moy);$loop++) {
-			$sql="INSERT INTO b_droits_divers SET nom_droit='insert_mass_appreciation_type_d_apres_moyenne', valeur_droit='y', login='".$login_user_mass_app_moy[$loop]."';";
-			$insert=mysqli_query($mysqli, $sql);
-			if(!$insert) {
-				$msg.="Erreur lors de l'enregistrement du droit insert_mass_appreciation_type_d_apres_moyenne pour ".civ_nom_prenom($login_user_mass_app_moy[$loop]).".<br />";
-			}
-			else {
-				$nb_mass++;
-			}
-		}
-		if($nb_mass>0) {
-			$msg.="$nb_mass droit(s) insert_mass_appreciation_type_d_apres_moyenne enregistré(s).<br />";
+	}
+	else {
+		if (!saveSetting("EdtIcalResponsable", "no")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalResponsable !";
 		}
 	}
 }
 
-if (isset($_POST['acces_app_ele_resp'])) {
-	$acces_app_ele_resp=$_POST['acces_app_ele_resp'];
-	if (!saveSetting("acces_app_ele_resp", $acces_app_ele_resp)) {
-		$msg .= "Erreur lors de l'enregistrement de 'acces_app_ele_resp' !<br />";
+if((isset($_POST['is_posted']))&&($_POST['is_posted']==3)) {
+	check_token();
+
+	if(isset($_POST['EdtIcalUploadScolarite'])) {
+		if (!saveSetting("EdtIcalUploadScolarite", "yes")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalUploadScolarite !";
+		}
 	}
 	else {
-		$msg .= "Enregistrement de 'acces_app_ele_resp' effectué.<br />";
+		if (!saveSetting("EdtIcalUploadScolarite", "no")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalUploadScolarite !";
+		}
+	}
+
+	if(isset($_POST['EdtIcalUploadCpe'])) {
+		if (!saveSetting("EdtIcalUploadCpe", "yes")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalUploadCpe !";
+		}
+	}
+	else {
+		if (!saveSetting("EdtIcalUploadCpe", "no")) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalUploadCpe !";
+		}
 	}
 }
-if (isset($_POST['acces_moy_ele_resp'])) {
-	$acces_moy_ele_resp=$_POST['acces_moy_ele_resp'];
-	if (!saveSetting("acces_moy_ele_resp", $acces_moy_ele_resp)) {
-		$msg .= "Erreur lors de l'enregistrement de 'acces_moy_ele_resp' !<br />";
+
+if((isset($_POST['is_posted']))&&($_POST['is_posted']==4)) {
+	check_token();
+
+	if(isset($_POST['EdtIcalFormatNomProf'])) {
+		if (!saveSetting("EdtIcalFormatNomProf", $_POST['EdtIcalFormatNomProf'])) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalFormatNomProf !";
+		}
 	}
-	else {
-		$msg .= "Enregistrement de 'acces_moy_ele_resp' effectué.<br />";
-	}
-}
-if (isset($_POST['acces_moy_ele_resp_cn'])) {
-	$acces_moy_ele_resp_cn=$_POST['acces_moy_ele_resp_cn'];
-	if (!saveSetting("acces_moy_ele_resp_cn", $acces_moy_ele_resp_cn)) {
-		$msg .= "Erreur lors de l'enregistrement de 'acces_moy_ele_resp_cn' !<br />";
-	}
-	else {
-		$msg .= "Enregistrement de 'acces_moy_ele_resp_cn' effectué.<br />";
+
+	if(isset($_POST['EdtIcalFormatNomMatière'])) {
+		if (!saveSetting("EdtIcalFormatNomMatière", $_POST['EdtIcalFormatNomMatière'])) {
+			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalFormatNomMatière !";
+		}
 	}
 }
 
 if (isset($_POST['is_posted']) and ($msg=='')){
-  $msg = "Les modifications ont été enregistrées (".strftime("le %d/%m/%Y à %H:%M:%S").") !";
+  $msg = "Les modifications ont été enregistrées !";
   $post_reussi=TRUE;
 }
 
@@ -215,7 +207,7 @@ if (!suivi_ariane($_SERVER['PHP_SELF'],$titre_page))
 /****************************************************************
 			BAS DE PAGE
 ****************************************************************/
-$tbs_microtime	="";
+$tbs_microtime="";
 $tbs_pmv="";
 require_once ("../lib/footer_template.inc.php");
 
@@ -231,7 +223,7 @@ if ((!isset($_SESSION['rep_gabarits'])) || (empty($_SESSION['rep_gabarits']))) {
 // $affiche_debug=debug_var();
 
 
-$nom_gabarit = '../templates/'.$_SESSION['rep_gabarits'].'/bulletin/index_admin_template.php';
+$nom_gabarit = '../templates/'.$_SESSION['rep_gabarits'].'/edt/index_admin_template.php';
 
 $tbs_last_connection=""; // On n'affiche pas les dernières connexions
 /**
