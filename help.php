@@ -2,11 +2,11 @@
 
 /*
 
- * Last modification  : 04/04/2005
+ * Last modification  : 14/03/2005
 
  *
 
- * Copyright 2001, 2005 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ * Copyright 2001-2004 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
 
  *
 
