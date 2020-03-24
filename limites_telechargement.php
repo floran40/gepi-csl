@@ -35,7 +35,7 @@ if ($resultat_session == 'c') {
 
 //On vérifie si le module est activé
 if (!acces_cdt()) {
-	die("Le module n'est pas activé.");
+    die("Le module n'est pas activé.");
 }
 
 //**************** EN-TETE *****************
