@@ -1,9 +1,8 @@
 <?php
-
 /*
  * $Id$
  *
- * Copyright 2001, 2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ * Copyright 2001-2012 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
  *
  * This file is part of GEPI.
  *
@@ -21,82 +20,330 @@
  * along with GEPI; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-
 // Initialisations files
 require_once("../lib/initialisations.inc.php");
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-die();
-
+	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+	die();
 } else if ($resultat_session == '0') {
-    header("Location: ../logout.php?auto=1");
-die();
-};
+	header("Location: ../logout.php?auto=1");
+	die();
+}
 
 if (!checkAccess()) {
-    header("Location: ../logout.php?auto=1");
-die();
+	header("Location: ../logout.php?auto=1");
+	die();
+}
+//debug_var();
+$msg = '';
+$error = false;
+if (isset($_POST['is_posted'])) {
+	// Les données ont été postées, on met à jour
+	check_token();
+
+	$get_all_matieres = mysqli_query($GLOBALS["mysqli"], "SELECT matiere, priority, categorie_id, code_matiere FROM matieres");
+	while ($row = mysqli_fetch_object($get_all_matieres)) {
+		// On passe les matières une par une et on met à jour
+		$varname_p = my_strtolower($row->matiere)."_priorite";
+		$varname_cm = my_strtolower($row->matiere)."_code_matiere";
+		//echo "<p>Test \$varname_p=$varname_p<br />";
+		if (isset($_POST[$varname_p])) {
+			//echo "isset(\$_POST[$varname_p]) oui<br />";
+			if (is_numeric($_POST[$varname_p])) {
+				//echo "is_numeric(\$_POST[$varname_p]) oui<br />";
+				// La valeur est correcte
+				if ($_POST[$varname_p] != $row->priority) {
+					// On a une valeur différente. On met à jour.
+					$res = mysqli_query($GLOBALS["mysqli"], "UPDATE matieres SET priority = '".$_POST[$varname_p] . "' WHERE matiere = '" . $row->matiere . "'");
+					if (!$res) {
+						$msg .= "<br/>Erreur lors de la mise à jour de la priorité de la matière ".$row->matiere.".";
+						$error = true;
+					}
+				}
+				// On met à jour toutes les priorités dans les classes si ça a été demandé
+				if (isset($_POST['forcer_defauts']) AND $_POST['forcer_defauts'] == "yes") {
+					$sql="UPDATE j_groupes_matieres jgm, j_groupes_classes jgc SET jgc.priorite='".$_POST[$varname_p]."' " .
+								"WHERE (jgc.id_groupe = jgm.id_groupe AND jgm.id_matiere='".$row->matiere."')";
+					//echo "$sql<br />";
+					$req = mysqli_query($GLOBALS["mysqli"], $sql);
+					if (!$req) {
+						$msg .="<br/>Erreur lors de la mise à jour de la priorité de matière dans les classes pour la matière ".$row->matiere.".";
+						$error = true;
+					}
+				}
+			}
+		}
+
+		if (isset($_POST[$varname_cm])) {
+			if ((is_numeric($_POST[$varname_cm]))||($_POST[$varname_cm]=="")) {
+				if ($_POST[$varname_cm] != $row->code_matiere) {
+					// On a une valeur différente. On met à jour.
+					$res = mysqli_query($GLOBALS["mysqli"], "UPDATE matieres SET code_matiere = '".$_POST[$varname_cm] . "' WHERE matiere = '" . $row->matiere . "'");
+					if (!$res) {
+						$msg .= "<br/>Erreur lors de la mise à jour du code_matiere de la matière ".$row->matiere.".";
+						$error = true;
+					}
+				}
+			}
+		}
+
+		// La même chose pour la catégorie de matière
+		$varname_c = my_strtolower($row->matiere)."_categorie";
+		if (isset($_POST[$varname_c])) {
+			if (is_numeric($_POST[$varname_c])) {
+				// On a une valeur correcte. On y va !
+				if ($_POST[$varname_c] != $row->categorie_id) {
+					// On a une valeur différente. On met à jour.
+					$res = mysqli_query($GLOBALS["mysqli"], "UPDATE matieres SET categorie_id = '".$_POST[$varname_c] . "' WHERE matiere = '" . $row->matiere . "'");
+					if (!$res) {
+						$msg .= "<br/>Erreur lors de la mise à jour de la catégorie de la matière ".$row->matiere.".";
+						$error = true;
+					}
+				}
+
+				// On met à jour toutes les catégories dans les classes si ça a été demandé
+				if (isset($_POST['forcer_defauts']) AND $_POST['forcer_defauts'] == "yes") {
+					$req = mysqli_query($GLOBALS["mysqli"], "UPDATE j_groupes_classes jgc, j_groupes_matieres jgm SET jgc.categorie_id='".$_POST[$varname_c]."' " .
+												"WHERE (jgc.id_groupe = jgm.id_groupe AND jgm.id_matiere='".$row->matiere."')");
+					if (!$req) {
+						$msg .="<br/>Erreur lors de la mise à jour de la catégorie de matière dans les classes pour la matière ".$row->matiere.".";
+						$error = true;
+					}
+				}
+			}
+		}
+	}
+
+	if ($error) {
+		$msg .= "<br/>Des erreurs se sont produites lors de la mise à jour des données.";
+	} else {
+		$msg .= "<br/>Mise à jour effectuée.";
+	}
 }
 
-// Page bourrinée... la gestion du token n'est pas faite... et ne sera faite que si quelqu'un utilise encore ce mode d'initialisation et le manifeste sur la liste de diffusion gepi-users
-check_token();
-
-if (!function_exists("dbase_open"))  {
-    $msg = "ATTENTION : PHP n'est pas configuré pour gérer les fichiers GEP (dbf). L'extension  d_base n'est pas active. Adressez-vous à l'administrateur du serveur pour corriger le problème.";
-}
-
+$themessage = 'Des modifications ont été effectuées. Voulez-vous vraiment quitter sans enregistrer ?';
 //**************** EN-TETE *****************
-$titre_page = "Outil d'initialisation de l'année";
+$titre_page = "Gestion des matières";
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
 ?>
-<p class=bold>|<a href="../gestion/index.php">Retour</a>|</p>
 
-<p><strong>Vous allez effectuer l'initialisation de l'année scolaire qui vient de débuter.</strong><br />
-(<em>c'est une opération que vous ne devez effectuer qu'<span style='color:red'>une seule fois par an</span>.<br />
+<p class=bold><a href="../accueil_admin.php"<?php echo insert_confirm_abandon();?>><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a>
+ | <a href="modify_matiere.php"<?php echo insert_confirm_abandon();?>>Ajouter matière</a>
+ | <a href='matieres_param.php'<?php echo insert_confirm_abandon();?>>Paramétrage de plusieurs matières par lots</a>
+ | <a href='matieres_categories.php'<?php echo insert_confirm_abandon();?>>Editer les catégories de matières</a>
+ | <a href='matieres_csv.php'<?php echo insert_confirm_abandon();?>>Importer un CSV de la liste des matières</a>
+ | <a href='../gestion/admin_nomenclatures.php'<?php echo insert_confirm_abandon();?>>Gérer les nomenclatures</a>
 <?php
+	if(acces("/gestion/gerer_modalites_election_enseignements.php", $_SESSION['statut'])) {
+		echo " | <a href='../gestion/gerer_modalites_election_enseignements.php' title=\"Gérer les modalités d'élection des enseignements.\">Modalités d'élection enseignements</a>";
+	}
+	if(acces("/matieres/associations_matieres_enseignements.php", $_SESSION['statut'])) {
+		echo " | <a href='associations_matieres_enseignements.php' title=\"Modifier les matières associées aux enseignements.\">Associations matières/enseignements</a>";
+	}
+?>
+</p>
 
-	if(getSettingValue("import_maj_xml_sconet")==1) {
-		echo "Pour mettre à jour la base avec les informations saisies en cours d'année dans Sconet pour les changements d'adresses, arrivées d'èlèves,...<br />il faut effectuer une <a href='../responsables/maj_import.php'>Mise à jour d'après Sconet</a></em>)<br />";
+<?php
+	$tab_priorites_categories=array();
+	$temoin_pb_ordre_categories="n";
+	$sql="select * from matieres_categories;";
+	$res_cat=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res_cat)>0) {
+		while($lig_cat=mysqli_fetch_object($res_cat)) {
+			$current_priority=$lig_cat->priority;
+			if(in_array($current_priority, $tab_priorites_categories)) {
+				$temoin_pb_ordre_categories="y";
+			}
+			$tab_priorites_categories[]=$current_priority;
+		}
+	}
+
+	if($temoin_pb_ordre_categories=="y") {
+		echo "<p style='color:red; text-indent:-6em;padding-left:6em;'><strong>Anomalie&nbsp;:</strong> Les catégories de matières ne doivent pas avoir le même rang.<br />Cela risque de provoquer des problèmes sur les bulletins.<br />Vous devriez corriger les ordres de catégories de matières dans <a href='matieres_categories.php'".insert_confirm_abandon().">Editer les catégories de matières</a></p>\n";
+	}
+
+	$tab_mat_bull=array();
+	$sql="SELECT DISTINCT id_matiere FROM j_groupes_matieres WHERE id_groupe NOT IN (SELECT id_groupe FROM j_groupes_visibilite WHERE domaine='bulletin' AND visible='n');";
+	$res_v=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res_v)>0) {
+		while($lig_v=mysqli_fetch_object($res_v)) {
+			$tab_mat_bull[]=$lig_v->id_matiere;
+		}
+	}
+?>
+
+<form enctype="multipart/form-data" action="index.php" method=post>
+<?php
+echo add_token_field();
+?>
+<input type='submit' value='Enregistrer' style='margin-left: 10%; margin-bottom: 0px;' />
+<p><label for='forcer_defauts' style='cursor: pointer;'>Pour toutes les classes, forcer les valeurs définies pour toutes les matières ci-dessous <input type='checkbox' name='forcer_defauts' id='forcer_defauts' value='yes' /></label>
+<br/><b>Attention !</b> Cette fonction effacera tous vos changements manuels concernant la priorité et la catégorie de chaque matière dans les différentes classes !</p>
+<input type='hidden' name='is_posted' value='1' />
+<table class='boireaus' width = '100%' cellpadding = '5'>
+<tr>
+    <th>
+    <p class='bold'><a href='./index.php?orderby=m.matiere'<?php echo insert_confirm_abandon();?>>Identifiant matière</a><br />
+    <a href="javascript:afficher_masquer_matieres_sans_grp('afficher')"><img src="../images/icons/visible.png" width="19" height="16" title="Afficher les matières sans enseignement associé" alt="Afficher les matières sans enseignement associé" /></a> / <a href="javascript:afficher_masquer_matieres_sans_grp('masquer')"><img src="../images/icons/invisible.png" width="19" height="16" title="Masquer les matières sans enseignement associé" alt="Masquer les matières sans enseignement associé" /></a> / <a href="javascript:modif_aff_bull()"><img src="../images/icons/bulletin_16.png" width="16" height="16" title="Afficher/Masquer les matières n'apparaissant pas sur les bulletins" alt="Afficher/Masquer les matières no_bull" /></a>
+    </p></th>
+    <th><p class='bold'><a href='./index.php?orderby=m.nom_complet'<?php echo insert_confirm_abandon();?>>Nom complet</a></p></th>
+    <th><p class='bold'><a href='./index.php?orderby=m.priority,m.nom_complet'<?php echo insert_confirm_abandon();?>>Ordre d'affichage<br />par défaut</a></p></th>
+    <th><p class='bold'>Catégorie par défaut</p></th>
+    <th><p class='bold' title="Le renseignement des codes matières est nécessaire pour le Livret Scolaire Lycée">Code matière</p></th>
+    <th><p class='bold'>Supprimer</p></th>
+</tr>
+<?php
+$orderby = isset($_GET['orderby']) ? $_GET['orderby'] : (isset($_POST['orderby']) ? $_POST["orderby"] : 'm.priority,m.nom_complet');
+if ($orderby != "m.matiere" AND $orderby != "m.nom_complet" AND $orderby != "m.priority,m.matiere") {
+    $orderby = "m.priority,m.nom_complet";
+}
+$_SESSION['chemin_retour'] = $_SERVER['REQUEST_URI'];
+// On va chercher les classes déjà existantes, et on les affiche.
+
+$categories=array();
+$call_data = mysqli_query($GLOBALS["mysqli"], "SELECT m.matiere, m.nom_complet, m.priority, m.categorie_id, m.code_matiere FROM matieres m ORDER BY $orderby");
+$get_cat = mysqli_query($GLOBALS["mysqli"], "SELECT id, nom_court FROM matieres_categories");
+while ($row = mysqli_fetch_array($get_cat,  MYSQLI_ASSOC)) {
+    $categories[] = $row;
+}
+
+$cpt=0;
+$tab_code_matiere=array();
+$sql="SELECT * FROM nomenclatures_valeurs WHERE type='matiere' AND nom='libelle_court' ORDER BY valeur;";
+$res_nomenclature=mysqli_query($GLOBALS["mysqli"], $sql);
+if(mysqli_num_rows($res_nomenclature)>0) {
+	while($lig_nomenclature=mysqli_fetch_object($res_nomenclature)) {
+		$tab_code_matiere[$cpt]['code_matiere']=$lig_nomenclature->code;
+		$tab_code_matiere[$cpt]['libelle_court']=$lig_nomenclature->valeur;
+		$cpt++;
+	}
+}
+
+$nombre_lignes = mysqli_num_rows($call_data);
+$i = 0;
+$alt=1;
+while ($i < $nombre_lignes){
+    $alt=$alt*(-1);
+
+	$current_matiere = old_mysql_result($call_data, $i, "matiere");
+	$current_matiere_nom = old_mysql_result($call_data, $i, "nom_complet");
+	$current_matiere_priorite = old_mysql_result($call_data, $i, "priority");
+	$current_matiere_categorie_id = old_mysql_result($call_data, $i, "categorie_id");
+	$current_code_matiere = old_mysql_result($call_data, $i, "code_matiere");
+
+    if ($current_matiere_priorite > 1) {$current_matiere_priorite -= 10;}
+
+	$sql="SELECT 1=1 FROM j_groupes_matieres WHERE id_matiere='$current_matiere';";
+	$res_grp_associes=mysqli_query($GLOBALS["mysqli"], $sql);
+	$nb_grp_assoc=mysqli_num_rows($res_grp_associes);
+
+	$ajout_class="";
+	if(!in_array($current_matiere, $tab_mat_bull)) {
+		$ajout_class=" no_bull";
+	}
+	if($nb_grp_assoc==0) {
+		echo "<tr style='background-color:grey;' class='white_hover".$ajout_class."' id='tr_sans_grp_assoc_$i'><td title=\"Aucun enseignement n'est associé à cette matière\"><a href='modify_matiere.php?current_matiere=$current_matiere'".insert_confirm_abandon()." style=\"color:#0000AA\">$current_matiere</a></td>\n";
 	}
 	else {
-		echo "L'initialisation d'année ne convient pas pour prendre en compte les changements d'adresses, arrivées d'èlèves,...</em>)<br />";
+		echo "<tr class='lig$alt white_hover".$ajout_class."'><td title=\"$nb_grp_assoc enseignement(s) associé(s) à cette matière\"><a href='modify_matiere.php?current_matiere=$current_matiere'".insert_confirm_abandon().">$current_matiere</a></td>\n";
 	}
-?>
-<br />
-<ul>
-<li><p>Au cours de la procédure, le cas échéant, certaines données de l'année passée seront définitivement effacées de la base GEPI (élèves, notes, appréciations, ...) . Seules seront conservées les données suivantes :<br /><br />
-- les données relatives aux établissements,<br />
-- les données relatives aux classes : intitulés courts, intitulés longs, nombre de périodes et noms des périodes,<br />
-- les données relatives aux matières : identifiants et intitulés complets,<br />
-- les données relatives aux utilisateurs (professeurs, administrateurs, ...). Concernant les professeurs, les matières enseignées par les professeurs sont conservées,<br />
-- Les données relatives aux différents types d'AID.<br />&nbsp;</p></li>
+    //echo "<td>$current_matiere_nom</td>";
+    //echo "<td>".html_entity_decode($current_matiere_nom)."</td>";
+    echo "<td>".htmlspecialchars($current_matiere_nom)."</td>\n";
+    // La priorité par défaut
+    echo "<td>\n";
+    echo "<select size=1 name='" . my_strtolower($current_matiere)."_priorite' onchange='changement()'>\n";
+    $k = '0';
+    echo "<option value=0>0</option>\n";
+    $k='11';
+    $j = '1';
+    //while ($k < '51'){
+    while ($k < 110){
+        echo "<option value=$k"; if ($current_matiere_priorite == $j) {echo " SELECTED";} echo ">$j</option>\n";
+        $k++;
+        $j = $k - 10;
+    }
+    //echo "</select></td>\n";
+    echo "</select>\n";
 
-<li>
-	<?php
-	//==================================
-	// RNE de l'établissement pour comparer avec le RNE de l'établissement de l'année précédente
-	$gepiSchoolRne=getSettingValue("gepiSchoolRne") ? getSettingValue("gepiSchoolRne") : "";
-	//==================================
-	if($gepiSchoolRne=="") {
-		echo "<p><b style='color:red;'>Attention</b>: Le RNE de l'établissement n'est pas renseigné dans 'Gestion générale/<a href='../gestion/param_gen.php' target='_blank'>Configuration générale</a>'<br />Cela peut perturber l'import de l'établissement d'origine des élèves.<br />Vous devriez corriger avant de poursuivre.</p>\n";
+    "</td>\n";
+
+    echo "<td>\n";
+    echo "<select size=1 name='" . my_strtolower($current_matiere)."_categorie' onchange='changement()'>\n";
+
+	echo "<option value='0'";
+	if ($current_matiere_categorie_id == '0') {echo " SELECTED";}
+	echo ">Aucune</option>\n";
+    foreach ($categories as $row) {
+        echo "<option value='".$row["id"]."'";
+        if ($current_matiere_categorie_id == $row["id"]) {echo " SELECTED";}
+        echo ">".html_entity_decode($row["nom_court"])."</option>\n";
+    }
+    echo "</select>\n";
+    echo "</td>\n";
+
+
+	echo "<td>\n";
+	echo "<select size=1 name='" . my_strtolower($current_matiere)."_code_matiere' onchange='changement()'>
+	<option value=''>---</option>";
+	for($loop=0;$loop<count($tab_code_matiere);$loop++) {
+		$selected="";
+		if($current_code_matiere==$tab_code_matiere[$loop]['code_matiere']) {
+			$selected=" selected";
+		}
+		echo "
+			<option value='".$tab_code_matiere[$loop]['code_matiere']."'$selected>".$tab_code_matiere[$loop]['libelle_court']."</option>";
 	}
-	?>
+	echo "</select>\n";
+	echo "</td>\n";
 
-	<p>L'initialisation s'effectue en quatre phases, chacune nécessitant un fichier GEP particulier :</p>
-    <ul>
-    <li><p><a href='step1.php'>Procéder à la première phase</a> d'importation des élèves,  de constitution des classes et d'affectation des élèves dans les classes : le fichier <b>F_ELE.DBF</b> est requis.<br />&nbsp;</p></li>
-    <li><p><a href='responsables.php'>Procéder à la deuxième phase</a> d'importation des responsables des élèves : le fichier <b>F_ERE.DBF</b> est requis.<br />&nbsp;</p></li>
-    <li><p><a href='disciplines.php'>Procéder à la troisième phase</a> d'importation des matières : le fichier <b>F_tmt.dbf</b> est requis.<br />&nbsp;</p></li>
-    <li><p><a href='professeurs.php'>Procéder à la quatrième phase</a> d'importation des professeurs : le fichier <b>F_wind.dbf</b> est requis.<br />&nbsp;</p></li>
-    <li><p><a href='prof_disc_classe.php'>Procéder à la cinquième phase</a> d'affectation des matières à chaque professeur, d'affectation des professeurs dans chaque classe  et de définition des options suivies par les élèves : les fichiers <b>F_men.dbf</b> et <b>F_gpd.dbf</b> sont requis.<br />&nbsp;</p></li>
-    <li><p><a href='clean_tables.php'>Procéder à la sixième phase</a> de nettoyage des données : les données inutiles importées à partir des fichiers GEP lors des différentes phases d'initialisation seront effacées !<br />&nbsp;</p></li>
-    </ul>
-</li>
-<li><p>Une fois toute la procédure d'initialisation des données terminée, il vous sera possible d'effectuer toutes les modifications nécessaires au cas par cas par le biais des outils de gestion inclus dans <b>GEPI</b>.<br />&nbsp;</p></li>
-</ul>
-<?php
-require("../lib/footer.inc.php");
+
+    //echo "<td><a href=\"../lib/confirm_query.php?liste_cible=$current_matiere&amp;action=del_matiere\" onclick=\"return confirmlink(this, 'La suppression d\'une matière est irréversible. Une telle suppression ne devrait pas avoir lieu en cours d\'année. Si c\'est le cas, cela peut entraîner la présence de données orphelines dans la base. Etes-vous sûr de vouloir continuer ?', 'Confirmation de la suppression')\">Supprimer</a></td></tr>\n";
+    echo "<td><a href=\"suppr_matiere.php?matiere=$current_matiere\" onclick=\"return confirmlink(this, 'La suppression d\'une matière est irréversible. Une telle suppression ne devrait pas avoir lieu en cours d\'année. Si c\'est le cas, cela peut entraîner la présence de données orphelines dans la base. Etes-vous sûr de vouloir continuer ?', 'Confirmation de la suppression')\">Supprimer</a></td></tr>\n";
+	$i++;
+}
 ?>
+</table>
+<input type='submit' value='Enregistrer' style='margin-left: 70%; margin-top: 25px; margin-bottom: 100px;' />
+</form>
+
+<p style='text-indent: -4em; margin-left: 4em;'><em>NOTE&nbsp;:</em> Les matières qui ne sont associées à aucun enseignement apparaissent en gris.</p>
+
+<script type='text/javascript'>
+function afficher_masquer_matieres_sans_grp(mode) {
+	for(i=0;i<<?php
+	echo $nombre_lignes;
+	?>;i++) {
+		if(document.getElementById('tr_sans_grp_assoc_'+i)) {
+			//alert(i);
+			if(mode=='afficher') {
+				document.getElementById('tr_sans_grp_assoc_'+i).style.display='';
+			}
+			else {
+				document.getElementById('tr_sans_grp_assoc_'+i).style.display='none';
+			}
+		}
+	}
+}
+
+var aff_mat_no_bull="y";
+function modif_aff_bull() {
+	tab=document.getElementsByClassName('no_bull');
+	if(aff_mat_no_bull=="n") {
+		for(i=0;i<tab.length;i++) {
+			tab[i].style.display='';
+		}
+		aff_mat_no_bull="y";
+	}
+	else {
+		for(i=0;i<tab.length;i++) {
+			tab[i].style.display='none';
+		}
+		aff_mat_no_bull="n";
+	}
+}
+</script>
+<?php require("../lib/footer.inc.php");?>
