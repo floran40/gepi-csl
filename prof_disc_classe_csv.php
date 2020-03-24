@@ -1,7 +1,7 @@
 <?php
 @set_time_limit(0);
 /*
-* MODIF: boireaus AFFICHAGE DE COMMENTAIRES...
+* $Id$
 *
 * Copyright 2001, 2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
 *
@@ -29,19 +29,18 @@ extract($_POST, EXTR_OVERWRITE);
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-die();
+	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+	die();
 } else if ($resultat_session == '0') {
-header("Location: ../logout.php?auto=1");
-die();
-};
-
-if (!checkAccess()) {
-header("Location: ../logout.php?auto=1");
-die();
+	header("Location: ../logout.php?auto=1");
+	die();
 }
 
-// Page bourrinée... la gestion du token n'est pas faite... et ne sera faite que si quelqu'un utilise encore ce mode d'initialisation et le manifeste sur la liste de diffusion gepi-users
+if (!checkAccess()) {
+	header("Location: ../logout.php?auto=1");
+	die();
+}
+
 check_token();
 
 //=====================================
@@ -74,7 +73,7 @@ $titre_page = "Outil d'initialisation de l'année : Importation des relations pr
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
 ?>
-<p class=bold><a href="index.php"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour accueil initialisation</a></p>
+<p class="bold"><a href="index.php"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour accueil initialisation</a></p>
 <?php
 
 // On vérifie si l'extension d_base est active
@@ -95,6 +94,7 @@ if (!isset($step1)) {
 		echo "Des données concernant l'affectation de professeurs dans des classes sont actuellement présentes dans la base GEPI<br /></p>";
 		echo "<p>Si vous poursuivez la procédure ces données seront effacées.</p>";
 		echo "<form enctype='multipart/form-data' action='".$_SERVER['PHP_SELF']."' method='post'>";
+		echo add_token_field();
 		echo "<input type=hidden name='step1' value='y' />";
 		echo "<input type='submit' name='confirm' value='Poursuivre la procédure' />";
 		echo "</form>";
@@ -106,9 +106,14 @@ if (!isset($is_posted)) {
 	$del = @mysqli_query($GLOBALS["mysqli"], "DELETE FROM j_groupes_professeurs");
 	$del = @mysqli_query($GLOBALS["mysqli"], "DELETE FROM j_professeurs_matieres");
 
+	// Ménage sur l'ordre des groupes dans l'affichage simplifié prof:
+	// Sinon, on peut se retrouver avec des rangs aberrants liés à des groupes qui n'existent plus dans la table groupes.
+	$sql="DELETE FROM preferences WHERE name LIKE 'accueil_simpl_id_groupe_order_%';";
+	$del=mysqli_query($GLOBALS["mysqli"], $sql);
 
 	echo "<p>Importation des fichiers <b>F_men.csv</b> et <b>F_gpd.csv</b> contenant les données de relations entre professeurs, matière et classes.";
 	echo "<form enctype='multipart/form-data' action='".$_SERVER['PHP_SELF']."' method=post>";
+	echo add_token_field();
 	echo "<p>Veuillez préciser le nom complet du fichier <b>F_men.csv</b>.";
 	echo "<p><input type='file' size='80' name='dbf_file' />";
 	echo "<p>Veuillez préciser le nom complet du fichier <b>F_gpd.csv</b>.";
@@ -121,8 +126,7 @@ if (!isset($is_posted)) {
 } else {
 	$dbf_file = isset($_FILES["dbf_file"]) ? $_FILES["dbf_file"] : NULL;
 	$dbf_file2 = isset($_FILES["dbf_file2"]) ? $_FILES["dbf_file2"] : NULL;
-	//if ((strtoupper($dbf_file['name']) == "F_MEN.DBF") or (strtoupper($dbf_file2['name']) == "F_GPD.DBF")) {
-	if ((strtoupper($dbf_file['name']) == "F_MEN.CSV") or (strtoupper($dbf_file2['name']) == "F_GPD.CSV")) {
+	if ((mb_strtoupper($dbf_file['name']) == "F_MEN.CSV") or (mb_strtoupper($dbf_file2['name']) == "F_GPD.CSV")) {
 
 		//$fp = @dbase_open($dbf_file['tmp_name'], 0);
 		//$fp2 = @dbase_open($dbf_file2['tmp_name'], 0);
@@ -133,13 +137,13 @@ if (!isset($is_posted)) {
 			//@dbase_close($fp2);
 			echo "<p>Impossible d'ouvrir le fichier F_MEN.CSV !</p>";
 			fclose($fp2);
-			echo "<a href='".$_SERVER['PHP_SELF']."'>Cliquer ici </a> pour recommencer !</center></p>";
+			echo "<a href='".$_SERVER['PHP_SELF']."?a=a".add_token_in_url()."'>Cliquer ici </a> pour recommencer !</center></p>";
 		} else if (!$fp2) {
 			//echo "<p>Impossible d'ouvrir le fichier F_GPD.DBF !</p>";
 			//@dbase_close($fp);
 			echo "<p>Impossible d'ouvrir le fichier F_GPD.CSV !</p>";
 			fclose($fp);
-			echo "<a href='".$_SERVER['PHP_SELF']."'>Cliquer ici </a> pour recommencer !</center></p>";
+			echo "<a href='".$_SERVER['PHP_SELF']."?a=a".add_token_in_url()."'>Cliquer ici </a> pour recommencer !</center></p>";
 		} else {
 			// on constitue le tableau des champs à extraire dans $fp2
 			$tabchamps2 = array("GROCOD","DIVCOD");
@@ -182,12 +186,16 @@ if (!isset($is_posted)) {
 */
 			// On range dans tabindice les indices des champs retenus
 			// On repère l'indice des colonnes GROCOD et DIVCOD
+			$cpt_tmp=0;
 			for ($k = 0; $k < count($tabchamps2); $k++) {
 				for ($i = 0; $i < count($en_tete); $i++) {
 					//if ($en_tete[$i] == $tabchamps2[$k]) {
 					if (trim($en_tete[$i]) == $tabchamps2[$k]) {
-						$tabindice2[] = $i;
-						affiche_debug("\$tabindice2[]=$i<br />\n");
+						//$tabindice2[] = $i;
+						//affiche_debug("\$tabindice2[]=$i<br />\n");
+						$tabindice2[$cpt_tmp] = $i;
+						affiche_debug("\$tabindice2[$cpt_tmp]=$i<br />\n");
+						$cpt_tmp++;
 					}
 				}
 			}
@@ -199,14 +207,13 @@ if (!isset($is_posted)) {
 			//=========================
 			for($k = 1; ($k < $nblignes2+1); $k++){
 				// Pour chaque ligne du fichier F_GPD, on récupère dans $affiche[0] le GROCOD et dans $affiche[1] le DIVCOD
-				//$ligne = dbase_get_record($fp2,$k);
 				if(!feof($fp2)){
 					$ligne = fgets($fp2, 4096);
 					if(trim($ligne)!=""){
 						$tabligne=explode(";",$ligne);
 						for($i = 0; $i < count($tabchamps2); $i++) {
 							//$affiche[$i] = dbase_filter(trim($ligne[$tabindice2[$i]]));
-							$affiche[$i] = dbase_filter(trim($tabligne[$tabindice2[$i]]));
+							$affiche[$i] = nettoyer_caracteres_nom($tabligne[$tabindice2[$i]], "an", "_ -", "");
 							affiche_debug("\$affiche[$i]=$affiche[$i]<br />\n");
 						}
 						$tab_groupe[$affiche[0]] = $affiche[1];
@@ -264,35 +271,18 @@ if (!isset($is_posted)) {
 			}
 			fclose ($fp);
 
-/*
-			if (@dbase_get_record_with_names($fp,1)) {
-				$temp = @dbase_get_record_with_names($fp,1);
-			} else {
-				echo "<p>Le fichier sélectionné n'est pas valide !<br />";
-				echo "<a href='".$_SERVER['PHP_SELF']."'>Cliquer ici </a> pour recommencer !</center></p>";
-				die();
-			}
-
-			$nb = 0;
-			foreach($temp as $key => $val){
-				$en_tete[$nb] = "$key";
-				affiche_debug("\$en_tete[$nb]=$en_tete[$nb]<br />\n");
-				$nb++;
-			}
-			affiche_debug("==========================<br />\n");
-*/
 			// On range dans tabindice les indices des champs retenus
 			affiche_debug("count(\$tabchamps)=".count($tabchamps)."<br />\n");
 			//affiche_debug("count(\$en_tete)=".count($en_tete)."<br />\n");
 			affiche_debug("count(\$en_tete2)=".count($en_tete2)."<br />\n");
+
+			$cpt_tmp=0;
 			for ($k = 0; $k < count($tabchamps); $k++) {
-				//for ($i = 0; $i < count($en_tete); $i++) {
 				for ($i = 0; $i < count($en_tete2); $i++) {
-					//echo "\$en_tete2[$i]=".$en_tete2[$i]." et \$tabchamps[$k]=".$tabchamps[$k]."<br />\n";
-					//if ($en_tete2[$i] == $tabchamps[$k]) {
 					if (trim($en_tete2[$i]) == $tabchamps[$k]) {
-						$tabindice[] = $i;
-						affiche_debug("\$tabindice[]=$i<br />\n");
+						$tabindice[$cpt_tmp]=$i;
+						affiche_debug("\$tabindice[$cpt_tmp]=$i<br />\n");
+						$cpt_tmp++;
 					}
 				}
 			}
@@ -306,15 +296,14 @@ if (!isset($is_posted)) {
 			//=========================
 			$nb_reg_no = 0;
 			for($k = 1; ($k < $nblignes+1); $k++){
-				//$ligne = dbase_get_record($fp,$k);
 				if(!feof($fp)){
-					$ligne = fgets($fp, 4096);
+					$ligne = my_ereg_replace('"','',fgets($fp, 4096));
 					if(trim($ligne)!=""){
 						$tabligne=explode(";",$ligne);
 						for($i = 0; $i < count($tabchamps); $i++) {
 							//$affiche[$i] = dbase_filter(trim($ligne[$tabindice[$i]]));
 							//affiche_debug("\$affiche[$i]=dbase_filter(trim(\$ligne[$tabindice[$i]]))=$affiche[$i]<br />\n");
-							$affiche[$i] = dbase_filter(trim($tabligne[$tabindice[$i]]));
+							$affiche[$i] = nettoyer_caracteres_nom($tabligne[$tabindice[$i]], "an", "_ -", "");
 							affiche_debug("\$affiche[$i]=dbase_filter(trim(\$tabligne[".$tabindice[$i]."]))=".$affiche[$i]."<br />\n");
 						}
 						affiche_debug("==========================<br />\n");
@@ -333,6 +322,7 @@ if (!isset($is_posted)) {
 								// On arrive jusque là.
 								$req = mysqli_query($GLOBALS["mysqli"], "insert into j_professeurs_matieres set id_matiere='$affiche[0]', id_professeur='$login_prof', ordre_matieres=''");
 								affiche_debug("insert into j_professeurs_matieres set id_matiere='$affiche[0]', id_professeur='$login_prof', ordre_matieres=''<br />\n");
+								//echo "Ajout de la correspondance prof/matière suivante: $login_prof/$affiche[0]<br />\n";
 								echo "<p>Ajout de la correspondance prof/matière suivante: $login_prof/$affiche[0]<br />\n";
 								if(!$req) $nb_reg_no++;
 							}
@@ -378,7 +368,7 @@ if (!isset($is_posted)) {
 									$lig_classe_tmp=mysqli_fetch_object($res_classe_tmp);
 									$classe=$lig_classe_tmp->classe;
 
-									echo "<p>\n";
+									//echo "<p>\n";
 
 									$verif = mysqli_query($GLOBALS["mysqli"], "select g.id from " .
 											"groupes g, j_groupes_matieres jgm, j_groupes_professeurs jgp, j_groupes_classes jgc " .
@@ -433,6 +423,7 @@ if (!isset($is_posted)) {
 												$group_id = ((is_null($___mysqli_res = mysqli_insert_id($GLOBALS["mysqli"]))) ? false : $___mysqli_res);
 												$temoin_groupe_deja_cree=$group_id;
 
+												echo "<p>\n";
 												//echo "Création d'un groupe pour la matière $affiche[0], \n";
 												echo "Création d'un groupe (n°$group_id) pour la matière $affiche[0], \n";
 
@@ -506,7 +497,7 @@ if (!isset($is_posted)) {
 											echo "Ajout de $login_prof à un groupe existant (<i>plus d'un professeur pour ce groupe</i>).<br />\n";
 										}
 									}
-									echo "</p>\n";
+									//echo "</p>\n";
 								}
 							}
 						}
@@ -523,15 +514,15 @@ if (!isset($is_posted)) {
 				echo "<p>L'importation des relations professeurs/matières et professeurs/classes dans la base GEPI a été effectuée avec succès !<br />Vous pouvez procéder à l'étape suivante d'importation des options suivies par les élèves.</p>";
 
 			}
-			echo "<center><p><a href='init_options.php'>Importer les options suivies par les élèves</a></p></center>";
+			echo "<center><p><a href='init_options.php?a=a".add_token_in_url()."'>Importer les options suivies par les élèves</a></p></center>";
 		}
 	} else if ((trim($dbf_file['name'])=='') or (trim($dbf_file2['name'])=='')) {
 		echo "<p>Veuillez préciser les fichiers !<br />";
-		echo "<a href='".$_SERVER['PHP_SELF']."'>Cliquer ici </a> pour recommencer !</center></p>";
+		echo "<a href='".$_SERVER['PHP_SELF']."?a=a".add_token_in_url()."'>Cliquer ici </a> pour recommencer !</center></p>";
 
 	} else {
 		echo "<p>Fichier(s) sélectionné(s) non valide(s) !<br />";
-		echo "<a href='".$_SERVER['PHP_SELF']."'>Cliquer ici </a> pour recommencer !</center></p>";
+		echo "<a href='".$_SERVER['PHP_SELF']."?a=a".add_token_in_url()."'>Cliquer ici </a> pour recommencer !</center></p>";
 	}
 }
 require("../lib/footer.inc.php");

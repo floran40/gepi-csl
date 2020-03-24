@@ -1,7 +1,8 @@
 <?php
 /*
+ * $Id$
  *
- * Copyright 2001-2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ * Copyright 2001-2004 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
  *
  * This file is part of GEPI.
  *
@@ -40,9 +41,6 @@ if (!checkAccess()) {
     die();
 }
 
-// Page bourrinée... la gestion du token n'est pas faite... et ne sera faite que si quelqu'un utilise encore ce mode d'initialisation et le manifeste sur la liste de diffusion gepi-users
-check_token();
-
 // Initialisation du répertoire actuel de sauvegarde
 $dirname = getSettingValue("backup_directory");
 
@@ -50,28 +48,43 @@ $dirname = getSettingValue("backup_directory");
 switch($_GET['fileid']){
 	case 0:
 		$filename="f_wind.csv";
-		$filepath="../backup/".$dirname."/csv/".$filename;
 		break;
 	case 1:
 		$filename="f_men.csv";
-		$filepath="../backup/".$dirname."/csv/".$filename;
 		break;
 	case 2:
 		$filename="f_gpd.csv";
-		$filepath="../backup/".$dirname."/csv/".$filename;
 		break;
 	case 3:
 		$filename="f_tmt.csv";
-		$filepath="../backup/".$dirname."/csv/".$filename;
 		break;
 	case 4:
 		$filename="f_div.csv";
-		$filepath="../backup/".$dirname."/csv/".$filename;
+		break;
+	case 5:
+		$filename="eleves.csv";
+		break;
+	case 6:
+		$filename="personnes.csv";
+		break;
+	case 7:
+		$filename="responsables.csv";
+		break;
+	case 8:
+		$filename="adresses.csv";
+		break;
+	case 9:
+		$filename="etablissements.csv";
+		break;
+	case 10:
+		$filename="eleve_etablissement.csv";
 		break;
 	default:
 	    header("Location: ../logout.php?auto=1");
 	    die();
 }
+
+$filepath="../backup/".$dirname."/csv/".$filename;
 
 //header('Content-Encoding: utf-8');
 header('Content-Type: text/x-csv');

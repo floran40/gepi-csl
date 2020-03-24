@@ -1,6 +1,7 @@
 <?php
 @set_time_limit(0);
 /*
+ * $Id$
  *
  * Copyright 2001, 2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
  *
@@ -29,20 +30,19 @@ extract($_POST, EXTR_OVERWRITE);
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-die();
+	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+	die();
 } else if ($resultat_session == '0') {
-    header("Location: ../logout.php?auto=1");
-die();
-};
+	header("Location: ../logout.php?auto=1");
+	die();
+}
 
 
 if (!checkAccess()) {
-    header("Location: ../logout.php?auto=1");
-die();
+	header("Location: ../logout.php?auto=1");
+	die();
 }
 
-// Page bourrinée... la gestion du token n'est pas faite... et ne sera faite que si quelqu'un utilise encore ce mode d'initialisation et le manifeste sur la liste de diffusion gepi-users
 check_token();
 
 //**************** EN-TETE *****************
@@ -51,10 +51,10 @@ require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
 
 // On vérifie si l'extension d_base est active
-verif_active_dbase();
+//verif_active_dbase();
 
 ?>
-<script type="text/javascript">
+<script type="text/javascript" language="JavaScript">
 <!--
 function CocheCase(boul){
   len = document.formulaire.elements.length;
@@ -95,80 +95,33 @@ document.formulaire.elements[i+a].value = b ;
 </script>
 
 <?php
-echo "<center><h3 class='gepi'>Première phase d'initialisation<br />Importation des élèves,  constitution des classes et affectation des élèves dans les classes</h3></center>";
+echo "<center><h3 class='gepi'>Première phase d'initialisation<br />Importation des élèves, constitution des classes et affectation des élèves dans les classes</h3></center>";
 echo "<center><h3 class='gepi'>Deuxième étape : Enregistrement des classes</h3></center>";
 
-$liste_tables_del = array(
-"absences",
-"absences_gep",
-"aid",
-"aid_appreciations",
-//"aid_config",
-"avis_conseil_classe",
-//"classes",
-//"droits",
-"eleves",
-"responsables",
-"responsables2",
-"resp_pers",
-"resp_adr",
-//"etablissements",
-"j_aid_eleves",
-"j_aid_eleves_resp",
-"j_aid_utilisateurs",
-"j_eleves_classes",
-//==========================
-// On ne vide plus la table chaque année
-// Problème avec Sconet qui récupère seulement l'établissement de l'année précédente qui peut être l'établissement courant
-//"j_eleves_etablissements",
-//==========================
-"j_eleves_professeurs",
-"j_eleves_regime",
-//"j_professeurs_matieres",
-//"log",
-//"matieres",
-"matieres_appreciations",
-"matieres_notes",
-"matieres_appreciations_grp",
-"matieres_appreciations_tempo",
-//==========================
-// Tables notanet
-'notanet',
-'notanet_avis',
-'notanet_app',
-'notanet_verrou',
-'notanet_socles',
-'notanet_ele_type',
-//==========================
-//"periodes",
-"tempo2",
-//"temp_gep_import",
-"tempo",
-//"utilisateurs",
-"cn_cahier_notes",
-"cn_conteneurs",
-"cn_devoirs",
-"cn_notes_conteneurs",
-"cn_notes_devoirs",
-//"setting"
-);
+include("../lib/initialisation_annee.inc.php");
+$liste_tables_del = $liste_tables_del_etape_eleves;
 
 if (!isset($step2)) {
     $j=0;
     $flag=0;
     while (($j < count($liste_tables_del)) and ($flag==0)) {
-        if (old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM $liste_tables_del[$j]"),0)!=0) {
-            $flag=1;
-        }
+		$test = mysqli_num_rows(mysqli_query($GLOBALS["mysqli"], "SHOW TABLES LIKE '$liste_tables_del[$j]'"));
+		if($test==1){
+			if (old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM $liste_tables_del[$j]"),0)!=0) {
+				$flag=1;
+			}
+		}
         $j++;
     }
     if ($flag != 0){
-        echo "<p><b>ATTENTION ...</b><br />";
-        echo "Des données concernant la constitution des classes et l'affectation des élèves dans les classes sont présentes dans la base GEPI ! Si vous poursuivez la procédure, ces données seront définitivement effacées !</p>";
-        echo "<form enctype='multipart/form-data' action='step2.php' method=post>";
-        echo "<input type=hidden name='step2' value='y' />";
-        echo "<input type='submit' value='Poursuivre la procédure' />";
-        echo "</form>";
+        echo "<p><b>ATTENTION ...</b><br />\n";
+        echo "Des données concernant la constitution des classes et l'affectation des élèves dans les classes sont présentes dans la base GEPI ! Si vous poursuivez la procédure, ces données seront définitivement effacées !</p>\n";
+        echo "<form enctype='multipart/form-data' action='step2.php' method=post>\n";
+		echo add_token_field();
+        echo "<input type=hidden name='step2' value='y' />\n";
+        echo "<input type='submit' value='Poursuivre la procédure' />\n";
+        echo "</form>\n";
+		require("../lib/footer.inc.php");
         die();
     }
 }
@@ -176,16 +129,59 @@ if (!isset($step2)) {
 
 
 if (isset($is_posted)) {
-    $j=0;
-    while ($j < count($liste_tables_del)) {
-        if (old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM $liste_tables_del[$j]"),0)!=0) {
-            $del = @mysqli_query($GLOBALS["mysqli"], "DELETE FROM $liste_tables_del[$j]");
-        }
-        $j++;
-    }
+
+	echo "<p><em>On vide d'abord les tables suivantes&nbsp;:</em> ";
+	$j=0;
+	$k=0;
+	while ($j < count($liste_tables_del)) {
+		$sql="SHOW TABLES LIKE '".$liste_tables_del[$j]."';";
+		//echo "$sql<br />";
+		$test = sql_query1($sql);
+		if ($test != -1) {
+			if($k>0) {echo ", ";}
+			$sql="SELECT 1=1 FROM $liste_tables_del[$j];";
+			$res_test_tab=mysqli_query($GLOBALS["mysqli"], $sql);
+			if(mysqli_num_rows($res_test_tab)>0) {
+				$sql="DELETE FROM $liste_tables_del[$j];";
+				$del = @mysqli_query($GLOBALS["mysqli"], $sql);
+				echo "<b>".$liste_tables_del[$j]."</b>";
+				echo " (".mysqli_num_rows($res_test_tab).")";
+			}
+			else {
+				echo $liste_tables_del[$j];
+			}
+			$k++;
+		}
+		$j++;
+	}
+
+	// Ménage infos_actions:
+	$sql="SELECT * FROM infos_actions WHERE titre LIKE 'Nouvel élève%';";
+	//echo "$sql<br />";
+	$test = mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($test)>0) {
+		echo "<br />";
+		echo "Suppression d'anciens messages en page d'accueil invitant à créer de nouveaux comptes élèves.";
+		$sql="DELETE FROM infos_actions WHERE titre LIKE 'Nouvel élève%';";
+		$del = mysqli_query($GLOBALS["mysqli"], $sql);
+	}
+
+	// Suppression des comptes d'élèves:
+	echo "<br />\n";
+	echo "<p><em>On supprime les anciens comptes élèves...</em> ";
+	$sql="DELETE FROM utilisateurs WHERE statut='eleve';";
+	$del=mysqli_query($GLOBALS["mysqli"], $sql);
+
+	// Liste des comptes scolarité pour associer aux nouvelles classes
+	$sql="SELECT login FROM utilisateurs WHERE statut='scolarite';";
+	$res_scol=mysqli_query($GLOBALS["mysqli"], $sql);
+	$tab_user_scol=array();
+	if(mysqli_num_rows($res_scol)>0) {
+		while($lig_scol=mysqli_fetch_object($res_scol)) {$tab_user_scol[]=$lig_scol->login;}
+	}
 
     // On va enregistrer la liste des classes, ainsi que les périodes qui leur seront attribuées
-    $call_data = mysqli_query($GLOBALS["mysqli"], "SELECT distinct(DIVCOD) classe FROM temp_gep_import WHERE DIVCOD!='' ORDER BY DIVCOD");
+    $call_data = mysqli_query($GLOBALS["mysqli"], "SELECT distinct(DIVCOD) classe FROM temp_gep_import2 WHERE DIVCOD!='' ORDER BY DIVCOD");
     $nb = mysqli_num_rows($call_data);
     $i = "0";
 
@@ -195,13 +191,23 @@ if (isset($is_posted)) {
         // On teste d'abord :
         $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM classes WHERE (classe='$classe')"),0);
         if ($test == "0") {
-            //$reg_classe = mysql_query("INSERT INTO classes SET classe='".traitement_magic_quotes(corriger_caracteres($classe))."',nom_complet='".traitement_magic_quotes(corriger_caracteres($reg_nom_complet[$classe]))."',suivi_par='".traitement_magic_quotes(corriger_caracteres($reg_suivi[$classe]))."',formule='".traitement_magic_quotes(corriger_caracteres($reg_formule[$classe]))."', format_nom='np'");
-            $reg_classe = mysqli_query($GLOBALS["mysqli"], "INSERT INTO classes SET classe='".traitement_magic_quotes(corriger_caracteres($classe))."',nom_complet='".traitement_magic_quotes(corriger_caracteres($reg_nom_complet[$classe]))."',suivi_par='".traitement_magic_quotes(corriger_caracteres($reg_suivi[$classe]))."',formule='".html_entity_decode(traitement_magic_quotes(corriger_caracteres($reg_formule[$classe])))."', format_nom='np'");
+            $reg_classe = mysqli_query($GLOBALS["mysqli"], "INSERT INTO classes SET classe='".mysqli_real_escape_string($GLOBALS["mysqli"], nettoyer_caracteres_nom($classe, "an", " _-",""))."',nom_complet='".mysqli_real_escape_string($GLOBALS["mysqli"], nettoyer_caracteres_nom($reg_nom_complet[$classe], "an", " _-",""))."',suivi_par='".mysql_real_escape_string(nettoyer_caracteres_nom($reg_suivi[$classe]),  "an",  " ',._-", "")."',formule='".html_entity_decode(mysqli_real_escape_string($GLOBALS["mysqli"], nettoyer_caracteres_nom($reg_formule[$classe], "an", " ',._-","")))."', format_nom='cni'");
+
+			$id_classe=((is_null($___mysqli_res = mysqli_insert_id($GLOBALS["mysqli"]))) ? false : $___mysqli_res);
+			for($loop=0;$loop<count($tab_user_scol);$loop++) {
+				// TEST déjà assoc... cela peut arriver si des scories subsistent...
+				$sql="SELECT 1=1 FROM j_scol_classes WHERE login='$tab_user_scol[$loop]' AND id_classe='$id_classe';";
+				$test_j_scol_class=mysqli_query($GLOBALS["mysqli"], $sql);
+				if(mysqli_num_rows($test_j_scol_class)==0) {
+					//$tab_user_scol
+					$sql="INSERT INTO j_scol_classes SET login='$tab_user_scol[$loop]', id_classe='$id_classe';";
+					$insert_j_scol_class=mysqli_query($GLOBALS["mysqli"], $sql);
+				}
+			}
         } else {
-            //$reg_classe = mysql_query("UPDATE classes SET classe='".traitement_magic_quotes(corriger_caracteres($classe))."',nom_complet='".traitement_magic_quotes(corriger_caracteres($reg_nom_complet[$classe]))."',suivi_par='".traitement_magic_quotes(corriger_caracteres($reg_suivi[$classe]))."',formule='".traitement_magic_quotes(corriger_caracteres($reg_formule[$classe]))."', format_nom='np' WHERE classe='$classe'");
-			$reg_classe = mysqli_query($GLOBALS["mysqli"], "UPDATE classes SET classe='".traitement_magic_quotes(corriger_caracteres($classe))."',nom_complet='".traitement_magic_quotes(corriger_caracteres($reg_nom_complet[$classe]))."',suivi_par='".traitement_magic_quotes(corriger_caracteres($reg_suivi[$classe]))."',formule='".html_entity_decode(traitement_magic_quotes(corriger_caracteres($reg_formule[$classe])))."', format_nom='np' WHERE classe='$classe'");
+            $reg_classe = mysqli_query($GLOBALS["mysqli"], "UPDATE classes SET classe='".mysqli_real_escape_string($GLOBALS["mysqli"], nettoyer_caracteres_nom($classe, "an", " _-",""))."',nom_complet='".mysqli_real_escape_string($GLOBALS["mysqli"], nettoyer_caracteres_nom($reg_nom_complet[$classe], "an", " _-",""))."',suivi_par='".mysqli_real_escape_string($GLOBALS["mysqli"], nettoyer_caracteres_nom($reg_suivi[$classe], "an", " ',._-",""))."',formule='".html_entity_decode(mysqli_real_escape_string($GLOBALS["mysqli"], nettoyer_caracteres_nom($reg_formule[$classe], "an", " ',._-","")))."', format_nom='cni' WHERE classe='$classe'");
         }
-        if (!$reg_classe) echo "<p>Erreur lors de l'enregistrement de la classe $classe.";
+        if (!$reg_classe) {echo "<p style='color:red'>Erreur lors de l'enregistrement de la classe $classe.";}
 
         // On enregistre les périodes pour cette classe
         // On teste d'abord :
@@ -266,27 +272,26 @@ if (isset($is_posted)) {
        $id_classe = old_mysql_result($sql, $k);
        $res1 = mysqli_query($GLOBALS["mysqli"], "delete from classes where id='".$id_classe."'");
        $res2 = mysqli_query($GLOBALS["mysqli"], "delete from j_groupes_classes where id_classe='".$id_classe."'");
+       $res3 = mysqli_query($GLOBALS["mysqli"], "delete from d_dates_evenements_classes where id_classe='".$id_classe."'");
        $k++;
     }
     // On supprime les groupes qui n'ont plus aucune affectation de classe
     $res = mysqli_query($GLOBALS["mysqli"], "delete from groupes g, j_groupes_classes jgc, j_eleves_groupes jeg, j_groupes_professeurs jgp, j_groupes_matieres jgm WHERE (" .
-            "g.id != jgc.id_groupe and jeg.id_groupe != jgc.id_groupe and jgp.id_groupe != jgc.id_groupe and jgm.id_groupe != jgc.id_groupe)");
+    		"g.id != jgc.id_groupe and jeg.id_groupe != jgc.id_groupe and jgp.id_groupe != jgc.id_groupe and jgm.id_groupe != jgc.id_groupe)");
 
     $res = mysqli_query($GLOBALS["mysqli"], "delete from periodes where verouiller='T'");
     echo "<p>Vous venez d'effectuer l'enregistrement des données concernant les classes. S'il n'y a pas eu d'erreurs, vous pouvez aller à l'étape suivante pour enregistrer les données concernant les élèves.";
-    echo "<center><p><a href='step3.php'>Accéder à l'étape 3</a></p></center>";
-
-	// On sauvegarde le témoin du fait qu'il va falloir convertir pour remplir les nouvelles tables responsables:
-	saveSetting("conv_new_resp_table", 0);
-
+    echo "<center><p><a href='step3.php?a=a".add_token_in_url()."'>Accéder à l'étape 3</a></p></center>";
 } else {
     // On commence par "marquer" les classes existantes dans la base
     $sql = mysqli_query($GLOBALS["mysqli"], "UPDATE periodes SET verouiller='T'");
     //
-    $call_data = mysqli_query($GLOBALS["mysqli"], "SELECT distinct(DIVCOD) classe FROM temp_gep_import WHERE DIVCOD!='' ORDER BY DIVCOD");
+    //$call_data = mysql_query("SELECT distinct(DIVCOD) classe FROM temp_gep_import WHERE DIVCOD!='' ORDER BY DIVCOD");
+    $call_data = mysqli_query($GLOBALS["mysqli"], "SELECT distinct(DIVCOD) classe FROM temp_gep_import2 WHERE DIVCOD!='' ORDER BY DIVCOD");
     $nb = mysqli_num_rows($call_data);
     $i = "0";
     echo "<form enctype='multipart/form-data' action='step2.php' method=post name='formulaire'>";
+	echo add_token_field();
     echo "<input type=hidden name='is_posted' value='yes' />";
     echo "<p>Les classes en vert indiquent des classes déjà existantes dans la base GEPI.<br />Les classes en rouge indiquent des classes nouvelles et qui vont être ajoutées à la base GEPI.<br /></p>";
     echo "<p>Pour les nouvelles classes, des noms standards sont utilisés pour les périodes (période 1, période 2...), et seule la première période n'est pas verrouillée. Vous pourrez modifier ces paramètres ultérieurement</p>";
@@ -332,9 +337,10 @@ fonctionnalités offertes ci-dessous :</td>
  <tr>
   <td colspan="4">&nbsp;</td>
   <td align="right">le nom au bas du bulletin sera &nbsp;:&nbsp;</td>
-  <td><input type="text" name="nom" maxlength="80" size="40" />
+  <td>
+    <input type="text" name="nom" maxlength="80" size="40" />
   <input type ="button" name="but_nom" value="Recopier"
-onclick="javascript:MetVal('nom')" /></td>
+onclick="javascript:MetVal('nom')" />
  </td>
 </tr>
  <tr>
@@ -343,7 +349,7 @@ onclick="javascript:MetVal('nom')" /></td>
 &nbsp;:&nbsp;</td>
   <td><input type="text" name="pour" maxlength="80" size="40" />
   <input type ="button" name="but_pour" value="Recopier"
-onclick="javascript:MetVal('pour')" /></td>
+onclick="javascript:MetVal('pour')" />
  </td>
 </tr>
 <tr>
@@ -356,8 +362,15 @@ onclick="javascript:MetVal('pour')" /></td>
 <br />
 <?php
 
-    echo "<table border=1 cellpadding=2 cellspacing=2>";
-    echo "<tr><td><p class=\"small\"><center>Aide<br />Remplissage</center></p></td><td><p class=\"small\">Identifiant de la classe</p></td><td><p class=\"small\">Nom complet</p></td><td><p class=\"small\">Nom apparaissant au bas du bulletin</p></td><td><p class=\"small\">formule au bas du bulletin</p></td><td><p class=\"small\">Nombres de périodes</p></td></tr>";
+    echo "<table class='boireaus' border=1 cellpadding=2 cellspacing=2>";
+    echo "<tr>
+<th><p class=\"small\" align=\"center\">Aide<br />Remplissage</p></th>
+<th><p class=\"small\">Identifiant de la classe</p></th>
+<th><p class=\"small\">Nom complet</p></th>
+<th><p class=\"small\">Nom apparaissant au bas du bulletin</p></th>
+<th><p class=\"small\">formule au bas du bulletin</p></th>
+<th><p class=\"small\">Nombres de périodes</p></th></tr>\n";
+	$alt=1;
     while ($i < $nb) {
         $classe_id = old_mysql_result($call_data, $i, "classe");
         $test_classe_exist = mysqli_query($GLOBALS["mysqli"], "SELECT * FROM classes WHERE classe='$classe_id'");
@@ -377,37 +390,48 @@ onclick="javascript:MetVal('pour')" /></td>
             $suivi_par = old_mysql_result($test_classe_exist, 0, 'suivi_par');
             $formule = old_mysql_result($test_classe_exist, 0, 'formule');
         }
-        echo "<tr>";
-        echo "<td><center><input type=\"checkbox\" /></center></td>";
-        echo "<td>";
-        echo "<p><b><center>$nom_court</center></b></p>";
-        echo "";
-        echo "</td>";
-        echo "<td>";
-        echo "<input type=text name='reg_nom_complet[$classe_id]' value=\"".$nom_complet."\" /> ";
-        echo "</td>";
-        echo "<td>";
-        echo "<input type=text name='reg_suivi[$classe_id]' value=\"".$suivi_par."\" />";
-        echo "</td>";
-        echo "<td>";
-        echo "<input type=text name='reg_formule[$classe_id]' value=\"".$formule."\" />";
-        echo "</td>";
-        echo "<td>";
-        echo "<select size=1 name='reg_periodes_num[$classe_id]'>";
+		$alt=$alt*(-1);
+        echo "<tr class='lig$alt white_hover'>\n";
+        echo "<td><center><input type=\"checkbox\" /></center></td>\n";
+        echo "<td>\n";
+        echo "<p align='center'><b>$nom_court</b></p>\n";
+        //echo "";
+        echo "</td>\n";
+        echo "<td>\n";
+        echo "<input type=text name='reg_nom_complet[$classe_id]' value=\"".$nom_complet."\" /> \n";
+        echo "</td>\n";
+        echo "<td>\n";
+        echo "<input type=text name='reg_suivi[$classe_id]' value=\"".$suivi_par."\" />\n";
+        echo "</td>\n";
+        echo "<td>\n";
+        echo "<input type=text name='reg_formule[$classe_id]' value=\"".$formule."\" />\n";
+        echo "</td>\n";
+        echo "<td>\n";
+        echo "<select size=1 name='reg_periodes_num[$classe_id]'>\n";
         for ($k=1;$k<7;$k++) {
             echo "<option value='$k'";
             if ($nb_per == "$k") echo " SELECTED";
-            echo ">$k";
+            echo ">$k</option>\n";
         }
-        echo "</select>";
-        echo "</td></tr>";
+        echo "</select>\n";
+        echo "</td></tr>\n";
         $i++;
     }
-    echo "</table>";
-    echo "<input type=hidden name='step2' value='y' />";
-    echo "<center><input type='submit' value='Enregistrer les données' /></center>";
-    echo "</form>";
+    echo "</table>\n";
+    echo "<input type=hidden name='step2' value='y' />\n";
+    echo "<p align='center'><input type='submit' value='Enregistrer les données' /></p>\n";
+    echo "</form>\n";
 }
-echo "<p><br /></p>\n";
-require("../lib/footer.inc.php");
+
 ?>
+<p><em>Remarque sur les périodes&nbsp;:</em></p>
+<blockquote>
+	<p>Le nombre de périodes doit correspondre au nombre de bulletins qui sera édité pour chaque élève sur l'année.<br />
+	En collège par exemple, on saisira trois périodes (<em>trimestres</em>).<br />
+	Cela n'empêchera pas d'éditer six relevés de notes par élève au cours de l'année si vous souhaitez des relevés de notes de demi-période.<br />
+	Il ne serait en revanche pas possible d'éditer un bulletin fusion de deux périodes.</p>
+</blockquote>
+<p><br /></p>
+</div>
+</body>
+</html>

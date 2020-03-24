@@ -1,6 +1,7 @@
 <?php
 @set_time_limit(0);
 /*
+ * $Id$
  *
  * Copyright 2001, 2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
  *
@@ -28,20 +29,19 @@ extract($_POST, EXTR_OVERWRITE);
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-die();
+	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+	die();
 } else if ($resultat_session == '0') {
-    header("Location: ../logout.php?auto=1");
-die();
-};
+	header("Location: ../logout.php?auto=1");
+	die();
+}
 
 
 if (!checkAccess()) {
-    header("Location: ../logout.php?auto=1");
-die();
+	header("Location: ../logout.php?auto=1");
+	die();
 }
 
-// Page bourrinée... la gestion du token n'est pas faite... et ne sera faite que si quelqu'un utilise encore ce mode d'initialisation et le manifeste sur la liste de diffusion gepi-users
 check_token();
 
 //**************** EN-TETE *****************
@@ -49,10 +49,8 @@ $titre_page = "Outil d'initialisation de l'année | Initialisation  des options 
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
 ?>
-<p class=bold><a href="index.php"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour accueil initialisation</a></p>
+<p class="bold"><a href="index.php"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour accueil initialisation</a></p>
 <?php
-// On vérifie si l'extension d_base est active
-//verif_active_dbase();
 
 echo "<center><h3 class='gepi'>Cinquième phase d'initialisation<br />Affectation des matières à chaque professeur,<br />Affectation des professeurs dans chaque classe,<br />Importation des options suivies par les élèves</h3></center>";
 
@@ -69,9 +67,10 @@ if ($test1 ==0) {
         die();
     } else {
 
-        $test3 = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM temp_gep_import WHERE LOGIN !=''"),0);
+        //$test3 = old_mysql_result(mysql_query("SELECT count(*) FROM temp_gep_import WHERE LOGIN !=''"),0);
+        $test3 = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM temp_gep_import2 WHERE LOGIN !=''"),0);
         if ($test3 ==0) {
-            echo "<p class='grand'>Afin de procéder à la phase de définition des options suivies par les élèves, vous devez d'abord effectuer la première phase d'importation des élèves à partir du fichier F_ELE.DBF</p>";
+            echo "<p class='grand'>Afin de procéder à la phase de définition des options suivies par les élèves, vous devez d'abord effectuer la première phase d'importation des élèves à partir du fichier ELEVES.CSV</p>";
             die();
         }
     }
@@ -100,7 +99,8 @@ while ($classe_row = mysqli_fetch_object($appel_donnees_classes)) {
     }
     $tempo = mb_substr($tempo, 0, -2);
 
-    $call_data = mysqli_query($GLOBALS["mysqli"], "SELECT $tempo FROM temp_gep_import WHERE DIVCOD = '$classe'");
+    //$call_data = mysql_query("SELECT $tempo FROM temp_gep_import WHERE DIVCOD = '$classe'");
+    $call_data = mysqli_query($GLOBALS["mysqli"], "SELECT $tempo FROM temp_gep_import2 WHERE DIVCOD = '$classe'");
     $tab_options = array();
     while ($row = mysqli_fetch_object($call_data)) {
     	 $i = 1;
@@ -128,7 +128,8 @@ while ($classe_row = mysqli_fetch_object($appel_donnees_classes)) {
 
     while($i = mysqli_fetch_object($appel_donnees_eleves)) {
         $current_eleve_login = $i->login;
-        $call_data = mysqli_query($GLOBALS["mysqli"], "SELECT ELEOPT1,ELEOPT2,ELEOPT3,ELEOPT4,ELEOPT5,ELEOPT6,ELEOPT7,ELEOPT8,ELEOPT9,ELEOPT10,ELEOPT11,ELEOPT12 FROM temp_gep_import WHERE LOGIN = '$current_eleve_login'");
+        //$call_data = mysql_query("SELECT ELEOPT1,ELEOPT2,ELEOPT3,ELEOPT4,ELEOPT5,ELEOPT6,ELEOPT7,ELEOPT8,ELEOPT9,ELEOPT10,ELEOPT11,ELEOPT12 FROM temp_gep_import WHERE LOGIN = '$current_eleve_login'");
+        $call_data = mysqli_query($GLOBALS["mysqli"], "SELECT ELEOPT1,ELEOPT2,ELEOPT3,ELEOPT4,ELEOPT5,ELEOPT6,ELEOPT7,ELEOPT8,ELEOPT9,ELEOPT10,ELEOPT11,ELEOPT12 FROM temp_gep_import2 WHERE LOGIN = '$current_eleve_login'");
         while ($row = mysqli_fetch_array($call_data,  MYSQLI_NUM)) {
 	        $j="0";
 	        while ($j < $nb_options) {
