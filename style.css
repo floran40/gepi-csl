@@ -1,0 +1,397 @@
+
+body {
+	padding: 0em;
+	margin: 0em;
+	font-family: "DejaVu Sans", Verdana, sans-serif; 
+	background: #EEEEEE;
+	color: #330033;
+}
+
+/* images : suppression des bordures */
+img {
+	border: 0;
+}
+
+/* liens : definition generale */
+a {
+	color: #0000AA;
+	text-decoration: none;
+}
+a:visited {
+	color: #0000AA;
+	text-decoration: none;
+}
+a:hover {
+	color: gray;
+}
+a:active {
+	color: #0000AA;
+	text-decoration: none;
+}
+
+/* texte : classes de mises en forme generale */
+.center {
+	text-align:center;
+}	
+
+.bold {
+	font-weight: bold;
+	font-style: normal;
+}
+
+.rouge {
+	color:red;
+}
+
+.red {
+	color: red;
+}
+
+.grey {
+	color: gray;
+}
+
+#container {
+	margin-bottom:1em;
+	padding-left: 1em;
+	padding-right: 1em;
+}
+
+h1.gepi {
+	font-style: normal;
+	font-variant: small-caps;
+	font-weight: normal;
+	font-size: 14pt;
+	text-align: center;
+	letter-spacing: 2px;
+	line-height: 200%;
+}
+
+h2 {
+	font-style:  normal;
+	font-weight: normal;
+	font-variant: small-caps;
+	font-size: 14pt;
+	line-height: 150%;
+}
+
+h3 {
+	font-style:  normal;
+	font-weight: normal;
+	font-variant: small-caps;
+	font-size: 12pt;
+	line-height: 125%;
+}
+
+p {
+	font-style: normal;
+	font-variant: normal;
+	font-weight: normal;
+	font-size: 11pt;
+}
+
+hr {
+	margin: 2em 0;
+}
+
+label {
+	cursor: pointer;
+}
+
+.ariane {
+	margin-left: .5em;
+	font-size:smaller;
+}
+
+.ligneCaps {
+	display: table-row;
+	font-variant: small-caps;
+}
+
+.cellTab {
+	display: table-cell;
+	vertical-align: middle;
+	padding: .5em;
+}
+
+.cellTab70 {
+	display: table-cell; 
+	width: 70%;
+	vertical-align: middle;
+	padding: .5em;
+}
+
+.plusPetit {
+	font-size:smaller;
+}
+
+/* Bulletins simplifiés */
+.bull_simpl {
+	color: #000000;
+	font-size: 8pt;
+	font-style: normal;
+	font-weight: normal;
+}
+.bull_simpl_g {
+	color: #000000;
+	font-size: 12pt;
+	font-style: normal;
+	font-weight: normal;
+}
+
+.couleur_devoirs {
+	background-color: #AAE6AA;
+}
+.couleur_moy_cont {
+	background-color: #96C8F0;
+}
+.couleur_moy_sous_cont {
+	background-color: #FAFABE;
+}
+.couleur_calcul_moy {
+	background-color: #AAAAE6;
+}
+
+/* Div à la position fixe pour certains affichages */
+#fixe {
+	position:fixed;
+	bottom: 4em;
+	right: 4em;
+}
+
+
+table.menu {
+	width: 70%;
+	border-collapse: separate;
+	border-spacing: 0px;
+	border: none;
+	border-bottom: 1px solid lightgrey;
+	margin-right:auto;
+	margin-left:auto;
+	margin-top: 10px;
+	margin-bottom: 10px;
+	padding-left: 0px;
+	background-image: url("./images/background/left-top-corner.png");
+	background-repeat: no-repeat;
+	background-position: -1px 0%;
+}
+
+table.menu tr {
+}
+
+table.menu td {
+	border: 1px solid lightgrey;
+	border-bottom: none;
+	border-top: 1px solid lightgrey;
+	border-left: 1px solid lightgrey;
+	padding-left: 10px;
+	padding-right: 10px;
+}
+
+table.menu td a {
+	width: 90%;
+	padding: 5px;
+	display: block;
+}
+
+table.menu td a:hover {
+	border: none;
+	color: gray;
+}
+
+table.menu th {
+	border: none;
+	text-align: left;
+	padding-left: 20px;
+	padding-bottom: 3px;
+	padding-top: 3px;
+	font-size: 11pt;
+	color: black;
+
+}
+
+/* Mini-calendrier utilisé dans CDT et mod_absences 1 (au moins) */
+.cal_current_day{color:red}
+TD.calendar {border:0px; font-size: 7pt}
+TD.calendarcol1 {border:0px; font-size: 8pt}
+TD.calendarHeader {border:0px; font-size: 10pt}
+
+/* Styles utilisés ici et là... peut-être faudrait-il en remplacer certains par h1, h2,... */
+.grand {
+	color: #330033;
+	font-size: 16pt;
+}
+
+/* Icones */
+.icone9 {
+    height: 9px;
+    width: 9px;
+}
+
+.icone15 {
+    height: 15px;
+    width: 15px;
+}
+
+.icone16 {
+    height: 16px;
+    width: 16px;
+}
+
+.icone20 {
+    height: 20px;
+    width: 20px;
+}
+.icone32 {
+    height: 32px;
+    width: 32px;
+}
+.icone15x25 {
+    height: 25px;
+    width: 15px;
+}
+
+.cn_moymin {
+    color:red;
+}
+
+.cn_moyclasse {
+    color:blue;
+}
+
+.cn_moymax {
+    color:green;
+}
+
+/* ===================== */
+table.boireaus {
+	border-style: solid;
+	border-width: 1px;
+	border-color: black;
+	border-collapse: collapse;
+}
+
+.boireaus th {
+	border-style: solid;
+	border-width: 1px;
+	border-color: black;
+	/*background-color: khaki;*/
+	background-color: #fff5b1;
+	font-weight:bold;
+	text-align:center;
+	vertical-align: middle;
+    padding: .2em .5em;
+}
+
+.boireaus td {
+	text-align:center;
+	vertical-align: middle;
+	border-style: solid;
+	border-width: 1px;
+	border-color: black;
+	padding: .2em .5em;
+}
+
+.boireaus .lig-1 {
+	background-color: #C8FFC8;
+}
+.boireaus .lig1 {
+	background-color: #FFE6AA;
+}
+
+.boireaus_alt tr:nth-child(even) {
+	background-color: #C8FFC8;
+}
+.boireaus_alt tr:nth-child(odd) {
+	background-color: #FFE6AA;
+}
+
+.boireaus_alt2 tr.tr_alt:nth-child(even) {
+	background-color: #C8FFC8;
+}
+.boireaus_alt2 tr.tr_alt:nth-child(odd) {
+	background-color: #FFE6AA;
+}
+
+.joss_alt tr:nth-child(even) {
+	background-color: #E8F1F4;
+}
+.joss_alt tr:nth-child(odd) {
+	background-color: #C6DCE3;
+}
+
+/* =======================================*
+* Affichage de div sous forme de tableau
+*=========================================*/
+
+/* ===== 2 colonnes → 1ère colonne 30% ===== */
+.colonne {
+	display:table-cell;
+	padding:0.5em;
+	vertical-align:middle;
+	border-width:thin;
+	border-style:solid; 
+	border-color:#d3d3d3; 
+}
+
+.colonne:first-child {
+	width:30%; 
+	font-size:medium;
+	font-weight:normal;
+}
+
+.colonne + .colonne {
+	border-left: none;
+}
+
+
+/* ===== 3 colonnes ===== */
+.ligne3 {
+    display:table-row;
+}
+
+.col3 {
+	display:table-cell;
+	padding:0.5em ;
+}
+
+.col3_0 {
+	width:30%; 
+	font-size:medium;
+	font-weight:normal;
+}
+
+.col3_1  {
+	width:30%; 
+	font-size:medium;
+	font-weight:normal;
+}
+
+.col3_2  {
+	width:30%; 
+	font-size:medium;
+	font-weight:normal;
+}
+
+.fieldset_opacite50 {
+	border: 1px solid grey;
+	background-image: url("../images/background/opacite50.png");
+}
+
+#menu_barre li:first-letter {
+	font-weight:bold;
+}
+
+.texte_td_a_la_verticale {
+	writing-mode:tb-rl;
+	filter: flipv fliph;
+	white-space: nowrap;
+	margin-right:1em;
+}
+
+#fixe2 {
+position:fixed;
+top: 10em;
+right: 4em;
+}
+
