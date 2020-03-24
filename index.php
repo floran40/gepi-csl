@@ -1,8 +1,8 @@
 <?php
-
 /*
+ * $Id$
  *
- * Copyright 2001, 2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ * Copyright 2001, 2010 Thomas Belliard
  *
  * This file is part of GEPI.
  *
@@ -25,28 +25,31 @@
 require_once("../lib/initialisations.inc.php");
 // Resume session
 $resultat_session = $session_gepi->security_check();
+
 if ($resultat_session == 'c') {
-	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-	die();
+    header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+    die();
 } else if ($resultat_session == '0') {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+    die();
 }
 
 if (!checkAccess()) {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+    die();
 }
 
 //**************** EN-TETE *****************
-$titre_page = "Outil d'initialisation de l'année";
+$titre_page = "Outil d'initialisation de l'année pour l'annuaire LDAP Scribe NG";
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
 ?>
-<p class='bold'><a href="../gestion/index.php"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a></p>
+<p class=bold><a href="../gestion/index.php#init_scribe_ng"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a></p>
 
-<p><strong>Vous allez effectuer l'initialisation de l'année scolaire qui vient de débuter.</strong><br />
-(<em>c'est une opération que vous ne devez effectuer qu'<span style='color:red'>une seule fois par an</span>.<br />
+<p>Vous allez effectuer l'initialisation de l'année scolaire qui vient de débuter, directement depuis l'annuaire LDAP de Scribe NG.<br />
+Celui-ci doit donc avoir été préalablement alimenté.<br />
+Cette procédure ne s'effectue qu'<span style='color:red'>une seule fois par an</span>.</p>
+
 <?php
 
 	if(getSettingValue("import_maj_xml_sconet")==1) {
@@ -67,21 +70,25 @@ require_once("../lib/header.inc.php");
 - les données relatives aux établissements,<br />
 - les données relatives aux classes : intitulés courts, intitulés longs, nombre de périodes et noms des périodes,<br />
 - les données relatives aux matières : identifiants et intitulés complets,<br />
-- les données relatives aux utilisateurs (professeurs, administrateurs, ...). Concernant les professeurs, les matières enseignées par les professeurs sont conservées,<br />
+- les données relatives aux utilisateurs personnels dans l'établissement (professeurs, administrateurs, ...). Concernant les professeurs, les matières enseignées par les professeurs sont conservées (et éventuellement complétées en phase 5),<br />
 - Les données relatives aux différents types d'AID.</li><br />
 
 <li>L'initialisation s'effectue en différentes phases :<br />
     <ul>
     <br />
-    <li><a href='eleves.php'>Procéder à la première phase</a> d'importation des élèves, de constitution des classes et d'affectation des élèves dans les classes.</li>
+    <li><a href='etape1.php'>Procéder à la première phase</a> d'importation des élèves et de cr&eacute;ation des classes.</li>
     <br />
-    <li><a href='professeurs.php'>Procéder à la deuxième phase</a> d'importation des professeurs.</li>
+    <li><a href='etape2.php'>Procéder à la deuxième phase</a> de cr&eacute;ation des p&eacute;riodes et d'affectation des &eacute;l&egrave;ves dans les classes.</li>
     <br />
-    <li><a href='disciplines.php'>Procéder à la troisième phase</a> d'importation des matières et d'affectation de ces matières aux professeurs.</li>
+    <li><a href='etape3.php'>Procéder à la troisième phase</a> d'importation des responsables l&eacute;gaux des &eacute;l&egrave;ves.</li>
     <br />
-    <li><a href='prof_disc_classes.php'>Procéder à la quatrième phase</a> d'affectation des professeurs aux classes et à la création des groupes d'enseignement.</li>
+    <li><a href='etape4.php'>Procéder à la quatrième phase</a> d'importation des professeurs.</li>
     <br />
-    <li><a href='eleves_options.php'>Procéder à la cinquième phase</a> d'affection des élèves aux enseignements optionnels.</li>
+    <li><a href='etape5.php'>Procéder à la cinquième phase</a> d'importation des matières.</li>
+    <br />
+    <li><a href='etape6.php'>Procéder à la sixième phase</a> d'importation des enseignements.</li>
+    <br />
+    <li><a href='etape7.php'>Procéder à la septième phase</a> d'importation des personnels non-enseignants.</li>
     <br />
     <br />
 </li>
