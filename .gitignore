@@ -1,17 +1,56 @@
-*/config/development
-*/logs/log-*.php
-!*/logs/index.html
-*/cache/*
-!*/cache/index.html
-!*/cache/.htaccess
+# Ignore configuration files that may contain sensitive information.
+secure/*
+!secure/modeles/
 
-user_guide_src/build/*
-user_guide_src/cilexer/build/*
-user_guide_src/cilexer/dist/*
-user_guide_src/cilexer/pycilexer.egg-info/*
+/lib/simplesaml/config/config.php
 
-#codeigniter 3
-application/logs/*
-!application/logs/index.html
-!application/logs/.htaccess
-/vendor/
+# Ignore paths that contain user-generated content.
+/backup
+!/backup/donnees_test
+temp
+/documents/*
+!/documents/archives/entete.php
+!/documents/archives/index.php
+!/documents/index.html
+*.log
+lib/standalone/HTMLPurifier/DefinitionCache/Serializer/*
+!lib/standalone/HTMLPurifier/DefinitionCache/Serializer/index.html
+mod_ooo/mes_modeles/*
+photos/eleves/*
+photos/personnels/*
+
+# Ignore dev files
+.settings
+.project
+.buildpath
+*.orig
+commit-*
+nbproject
+*.sh
+*REMOTE*
+
+# Ignore build generated files
+/build/coverage
+/build/logs
+/build/api
+
+# Ignore others files
+style_screen_ajout.css
+photos/eleves/*
+images/background/degrade1.png
+images/background/degrade1_small.png
+images/background/degrade1_very_small.png
+images/logo.jpg
+images/logo_etab.*
+artichow/cache/*
+.test
+lib/simplesaml/config/authsources.php
+lib/simplesaml/config/config.php
+
+# Ignore Les plugins
+mod_plugins/
+!mod_plugins/index.php
+!mod_plugins/plugins.class.php
+!mod_plugins/traiterRequetes.class.php
+!mod_plugins/traiterXml.class.php
+
