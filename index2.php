@@ -1,7 +1,21 @@
 <?php
-/*
- * Copyright 2001, 2019 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrunn, Régis Bouguin, Stephane Boireau
+/**
+ * Visualisation des moyennes des carnets de notes
+ * 
  *
+ * @copyright Copyright 2001, 2007 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ * @license GNU/GPL, 
+ * @package Carnet_de_notes
+ * @subpackage affichage
+ * @see add_token_field()
+ * @see checkAccess()
+ * @see getSettingValue()
+ * @see Session::security_check()
+ * @see sql_query1()
+ * @see tentative_intrusion()
+ */
+
+/*
  * This file is part of GEPI.
  *
  * GEPI is free software; you can redistribute it and/or modify
@@ -19,9 +33,10 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// Initialisations files
+/**
+ * Fichiers d'initialisation
+ */
 require_once("../lib/initialisations.inc.php");
-
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
@@ -32,584 +47,571 @@ if ($resultat_session == 'c') {
     die();
 }
 
-
+// INSERT INTO `droits` VALUES ('/cahier_notes/index2.php', 'F', 'V', 'V', 'V', 'F', 'F', 'Visualisation des moyennes des carnets de notes', '');
 if (!checkAccess()) {
     header("Location: ../logout.php?auto=1");
     die();
 }
-//Initialisation des variables
-$indice_aid = isset($_GET["indice_aid"]) ? $_GET["indice_aid"] : (isset($_POST["indice_aid"]) ? $_POST["indice_aid"] : NULL);
-$order_by = isset($_GET["order_by"]) ? $_GET["order_by"] : NULL;
 
-// Vérification du niveau de gestion des AIDs
-$NiveauGestionAid=NiveauGestionAid($_SESSION["login"],$indice_aid);
-//if (NiveauGestionAid($_SESSION["login"],$indice_aid) <= 0) {
-if ($NiveauGestionAid <= 0) {
-    header("Location: ../logout.php?auto=1");
-    die();
+$id_classe = isset($_POST['id_classe']) ? $_POST['id_classe'] : (isset($_GET['id_classe']) ? $_GET['id_classe'] : NULL);
+
+// On fait quelques tests si le statut est 'prof', pour vérifier les restrictions d'accès
+if ($_SESSION['statut'] == "professeur") {
+
+	if ( (getSettingValue("GepiAccesMoyennesProf") != "yes") AND
+	(getSettingValue("GepiAccesMoyennesProfTousEleves") != "yes") AND
+	(getSettingValue("GepiAccesMoyennesProfToutesClasses") != "yes")
+	) {
+
+		if((getSettingAOui('GepiAccesReleveProfP'))&&(is_pp($_SESSION['login']))) {
+			if(isset($id_classe)) {
+				if(!is_pp($_SESSION['login'], $id_classe)) {
+					$classe=get_nom_classe($id_classe);
+					$gepi_prof_suivi=retourne_denomination_pp($id_classe);
+					tentative_intrusion("1","Tentative d'accès par un ".$gepi_prof_suivi." aux moyennes des carnets de notes pour une classe qu'il n'a pas en responsabilité (".$classe.").");
+					header("Location: ../accueil.php?msg=Vous n'êtes pas ".$gepi_prof_suivi." de la classe de $classe.");
+					//echo "Vous n'êtes pas autorisé à être ici.";
+					//require ("../lib/footer.inc.php");
+					die();
+				}
+			}
+			else {
+				$sql="SELECT DISTINCT id_classe FROM j_eleves_professeurs jep, classes c WHERE jep.id_classe=c.id AND jep.professeur='".$_SESSION['login']."';";
+				$res_clas_pp=mysqli_query($GLOBALS["mysqli"], $sql);
+				if(mysqli_num_rows($res_clas_pp)==1) {
+					$id_classe=old_mysql_result($res_clas_pp, 0, "id_classe");
+				}
+			}
+		}
+		else {
+			tentative_intrusion("1","Tentative d'accès par un prof aux moyennes des carnets de notes sans avoir les autorisations nécessaires.");
+			header("Location: ../accueil.php?msg=Vous n'êtes pas autorisé à être ici.");
+			//echo "Vous n'êtes pas autorisé à être ici.";
+			//require ("../lib/footer.inc.php");
+			die();
+		}
+	}
 }
 
 
-if ($indice_aid =='') {
-	if(acces("/aid/index.php", $_SESSION['statut'])) {
-		header("Location: index.php?msg=AID non choisi");
+if (isset($id_classe)) {
+	// On regarde si le type est correct :
+	if (!is_numeric($id_classe)) {
+		tentative_intrusion("2", "Changement de la valeur de id_classe pour un type non numérique.");
+		echo "Erreur.";
+/**
+ * inclusion du pied de page
+ */
+		require ("../lib/footer.inc.php");
 		die();
 	}
-	else {
-		header("Location: ../accueil.php?msg=AID non choisi");
-		die();
+	// On teste si le professeur a le droit d'accéder à cette classe
+	if ($_SESSION['statut'] == "professeur" AND getSettingValue("GepiAccesMoyennesProfToutesClasses") != "yes") {
+		$test = mysqli_num_rows(mysqli_query($GLOBALS["mysqli"], "SELECT jgc.* FROM j_groupes_classes jgc, j_groupes_professeurs jgp WHERE (jgp.login='".$_SESSION['login']."' AND jgc.id_groupe = jgp.id_groupe AND jgc.id_classe = '".$id_classe."')"));
+		if ($test == "0") {
+			tentative_intrusion("2", "Tentative d'accès par un prof à une classe dans laquelle il n'enseigne pas, sans en avoir l'autorisation.");
+			echo "Vous ne pouvez pas accéder à cette classe car vous n'y êtes pas professeur !";
+            /**
+             * inclusion du pied de page
+             */
+			require ("../lib/footer.inc.php");
+			die();
+		}
 	}
 }
 
-include_once 'fonctions_aid.php';
-$javascript_specifique = "aid/aid_ajax";
-global $mysqli;
+$javascript_specifique="prepa_conseil/colorisation_visu_toutes_notes";
+//**************** EN-TETE *****************
+$titre_page = "Visualisation des moyennes des carnets de notes";
 
-$sql="SELECT * FROM aid_config WHERE indice_aid = '$indice_aid'";
-//echo "$sql<br />";
-$call_data = mysqli_query($GLOBALS["mysqli"], $sql);
-$nom_aid = @old_mysql_result($call_data, 0, "nom");
-$activer_outils_comp = @old_mysql_result($call_data, 0, "outils_complementaires");
-
-//if ((NiveauGestionAid($_SESSION["login"],$indice_aid) >= 10) and (isset($_POST["is_posted"]))) {
-if (($NiveauGestionAid >= 10) and (isset($_POST["is_posted"]))) {
-	check_token();
-
-    // Enregistrement des données
-    // On va chercher les aid déjà existantes
-	
-	$call_data_aid_courant=Extrait_aid_sur_indice_aid ($indice_aid);
-	$nombreligne = mysqli_num_rows($call_data_aid_courant);
-    $i = 0;
-    $msg_inter = "";
-    while ($i < $nombreligne){
-        $aid_id = @old_mysql_result($call_data_aid_courant, $i, "id");
-        // Enregistrement de fiche publique
-        if (isset($_POST["fiche_publique_".$aid_id])) {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set fiche_publique='y' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        } else {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set fiche_publique='n' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        };
-        if (!$register)
-			    $msg_inter .= "Erreur lors de l'enregistrement de la donnée fiche_publique de l'aid $aid_id <br />\n";
-        // Enregistrement de eleve_peut_modifier
-        if (isset($_POST["eleve_peut_modifier_".$aid_id])) {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set eleve_peut_modifier='y' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        } else {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set eleve_peut_modifier='n' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        };
-        if (!$register)
-			    $msg_inter .= "Erreur lors de l'enregistrement de la donnée eleve_peut_modifier de l'aid $aid_id <br />\n";
-         // Enregistrement de prof_peut_modifier
-        if (isset($_POST["prof_peut_modifier_".$aid_id])) {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set prof_peut_modifier='y' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        } else {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set prof_peut_modifier='n' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        };
-        if (!$register)
-			    $msg_inter .= "Erreur lors de l'enregistrement de la donnée prof_peut_modifier de l'aid $aid_id <br />\n";
-        // Enregistrement de cpe_peut_modifier
-        if (isset($_POST["cpe_peut_modifier_".$aid_id])) {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set cpe_peut_modifier='y' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        } else {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set cpe_peut_modifier='n' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        };
-        if (!$register)
-			    $msg_inter .= "Erreur lors de l'enregistrement de la donnée cpe_peut_modifier de l'aid $aid_id <br />\n";
-
-        // Enregistrement de affiche_adresse1
-        if (isset($_POST["affiche_adresse1_".$aid_id])) {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set affiche_adresse1='y' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        } else {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set affiche_adresse1='n' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        };
-        if (!$register)
-			    $msg_inter .= "Erreur lors de l'enregistrement de la donnée affiche_adresse1 de l'aid $aid_id <br />\n";
-        // Enregistrement de en_construction
-        if (isset($_POST["en_construction_".$aid_id])) {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set en_construction='y' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        } else {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set en_construction='n' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        };
-        if (!$register)
-			    $msg_inter .= "Erreur lors de l'enregistrement de la donnée en_construction de l'aid $aid_id <br />\n";
-
-        // Enregistrement de visibilite_eleve
-        if (isset($_POST["visibilite_eleve_".$aid_id])) {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set visibilite_eleve='y' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        } else {
-            $register = mysqli_query($GLOBALS["mysqli"], "update aid set visibilite_eleve='n' where indice_aid='".$indice_aid."' and id = '".$aid_id."'");
-        };
-        if (!$register)
-			    $msg_inter .= "Erreur lors de l'enregistrement de la donnée visibilite_eleve de l'aid $aid_id <br />\n";
-
-        $i++;
-    }
-    if ($msg_inter == "") {
-        $msg = "Les modifications ont été enregistrées.";
-    } else {
-        $msg = $msg_inter;
-    }
-}
-
-
-// On va chercher les aid déjà existantes, et on les affiche.
-if (!isset($order_by)) {$order_by = "numero,nom";}
-$sql="SELECT * FROM aid WHERE indice_aid='$indice_aid' ORDER BY $order_by;";
-//echo "$sql<br />";
-$calldata = mysqli_query($GLOBALS["mysqli"], $sql);
-$nombreligne = mysqli_num_rows($calldata);
-
-$trouve_parent = 0;
-$sql = "SELECT 1=1 FROM aid WHERE indice_aid='".$indice_aid."' AND sous_groupe='y' ";
-$trouve_parent = $mysqli->query($sql)->num_rows;
-$trouve_parent = Categorie_a_enfants ($indice_aid)->num_rows;
-
-//**************** EN-TETE *********************
-$titre_page = "Gestion des ".$nom_aid;
-// if (!suivi_ariane($_SERVER['PHP_SELF'],$titre_page))
-// if (!suivi_ariane($_SESSION['chemin_retour'],$titre_page))
-$fil = "";
-if ($indice_aid != NULL) $fil = $_SERVER['PHP_SELF']."?indice_aid=".$indice_aid;
-if (!suivi_ariane($fil ,$titre_page))
-		echo "erreur lors de la création du fil d'ariane";
+/**
+ * Entête de la page
+ */
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
+?>
 
-// debug_var();
-//echo "\$NiveauGestionAid=$NiveauGestionAid<br />";
-?>
-<p class="bold noprint">
-<?php 
-	if ($NiveauGestionAid >= 10) {
-		// Admin
-		echo "
-	<a href=\"index.php\" title=\"Retour à la page d'accueil des AID : Liste des catégories d'AID\">
-		<img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a>
-	</a>
-	|";
-	}
-	//if (NiveauGestionAid($_SESSION["login"],$indice_aid) >= 5) {
-	if (($NiveauGestionAid >= 5)&&(acces('/aid/add_aid.php', $_SESSION['statut']))) {
-?>
-	<!-- | -->
-	<a href="add_aid.php?action=add_aid&amp;mode=unique&amp;indice_aid=<?php echo $indice_aid; ?>">
-		Ajouter un(e) <?php echo $nom_aid; ?>
-	</a>
-	|
-	<a href="add_aid.php?action=add_aid&amp;mode=multiple&amp;indice_aid=<?php echo $indice_aid; ?>">
-		Ajouter des <?php echo $nom_aid; ?> à la chaîne
-	</a>
-<?php 
-	}
-	//if (NiveauGestionAid($_SESSION["login"],$indice_aid) >= 10) {
-	if ($NiveauGestionAid >= 10) {
-?>
-	|
-	<a href="export_csv_aid.php?indice_aid=<?php echo $indice_aid; ?>">
-		Importation de données depuis un fichier vers GEPI
-	</a>
 <?php
-	} 
+if (isset($id_classe)) {
+	echo "<form action='".$_SERVER['PHP_SELF']."' name='form1' method='post'>\n";
 
-	$NiveauGestionAid_categorie=NiveauGestionAid($_SESSION["login"],$indice_aid);
-	if($NiveauGestionAid_categorie==10) {
-		echo "
-		| <a href='config_aid.php?indice_aid=".$indice_aid."'>Catégorie AID</a>";
-	}
+	echo "<p class='bold'><a href='../accueil.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Accueil</a>";
 
-?>
-</p>
-<?php
-	//if ((NiveauGestionAid($_SESSION["login"],$indice_aid) >= 10) and ($activer_outils_comp == "y")) { 
-	if (($NiveauGestionAid >= 10) and ($activer_outils_comp == "y")) { 
-?>
-<p class="medium">
-	Les droits d'accès aux différents champs sont configurables pour l'ensemble des AID dans la page 
-	<strong><em>Gestion des AID -> <a href='./config_aid_fiches_projet.php'>Configurer les fiches projet</a></em></strong>
-	.
-</p>
-<?php } ?>
-<?php
-	//if ((NiveauGestionAid($_SESSION["login"],$indice_aid) >= 10) and ($activer_outils_comp == "y")) { 
-	if (($NiveauGestionAid >= 10) and ($activer_outils_comp == "y")) { 
-?>
-<form action="index2.php" name="form1" method="post">
-	<p class="center">
-		<input type="submit" name="Valider" />
-	</p>
-<?php } ?>
-	<table class='boireaus'>
-		<tr>
-			<th>
-				<a href='index2.php?order_by=numero,nom&amp;indice_aid=<?php echo $indice_aid;?>'>N°</a>
-			</th>
-			<th>
-				<a href='index2.php?order_by=nom&amp;indice_aid=<?php echo $indice_aid;?>'>Nom</a>
-			</th>
-<?php
-// En tete de la colonne "Ajouter, supprimer des professeurs"
-//if (NiveauGestionAid($_SESSION["login"],$indice_aid) >= 5) {
-if ($NiveauGestionAid >= 5) {
-	if(!((getSettingValue("num_aid_trombinoscopes")==$indice_aid) and (getSettingValue("active_module_trombinoscopes")=='y'))) {
-?>
-			<th class="noprint">&nbsp;</th>
-<?php
-	}
-}
-// En tete de la colonne "Ajouter, supprimer des élèves"
-?>
-			<th class="noprint">&nbsp;</th>
-<?php
-  // En tete de la colonne "Ajouter, supprimer des gestionnairess"
-//if (NiveauGestionAid($_SESSION["login"],$indice_aid) >= 10) {
-if ($NiveauGestionAid >= 10) {
-  if (getSettingValue("active_mod_gest_aid")=="y") {
-?>
-			<th class="noprint">&nbsp;</th>
-<?php
-	}
-}
-// colonne publier la fiche
-//if ((NiveauGestionAid($_SESSION["login"],$indice_aid) >= 10) and ($activer_outils_comp == "y")) {
-if (($NiveauGestionAid >= 10) and ($activer_outils_comp == "y")) {
-?>
-			<th class="small" style="font-weight: normal;">
-				La fiche est visible sur la 
-				<a href="javascript:centrerpopup('../public/index_fiches.php',800,500,'scrollbars=yes,statusbar=no,resizable=yes')">
-					partie publique
-				</a>
-				<br />
-				<span class="noprint">
-					<a href="javascript:CocheColonne(1);changement();">
-						<img src='../images/enabled.png' width='15' height='15' alt='Tout cocher' />
-					</a>
-					/
-					<a href="javascript:DecocheColonne(1);changement();">
-						<img src='../images/disabled.png' width='15' height='15' alt='Tout décocher' />
-					</a>					
-				</span>
-			</th>
-			<th class="small" style="font-weight: normal;">
-				Les élèves reponsables peuvent modifier la fiche (*)<br />
-				<span class="noprint">
-					<a href="javascript:CocheColonne(2);changement();">
-						<img src='../images/enabled.png' width='15' height='15' alt='Tout cocher' />
-					</a>
-					/
-					<a href="javascript:DecocheColonne(2);changement();">
-						<img src='../images/disabled.png' width='15' height='15' alt='Tout décocher' />
-					</a>					
-				</span>
-			</th>
-			<th class="small" style="font-weight: normal;">
-				Les professeurs reponsables peuvent modifier la fiche (*)<br />
-				<span class="noprint">
-					<a href="javascript:CocheColonne(3);changement();">
-						<img src='../images/enabled.png' width='15' height='15' alt='Tout cocher' />
-					</a>
-					/
-					<a href="javascript:DecocheColonne(3);changement();">
-						<img src='../images/disabled.png' width='15' height='15' alt='Tout décocher' />
-					</a>					
-				</span>
-			</th>
-			<th class="small" style="font-weight: normal;">
-				Les CPE peuvent modifier la fiche (*)<br />
-				<span class="noprint">
-					<a href="javascript:CocheColonne(4);changement();">
-						<img src='../images/enabled.png' width='15' height='15' alt='Tout cocher' />
-					</a>
-					/
-					<a href="javascript:DecocheColonne(4);changement();">
-						<img src='../images/disabled.png' width='15' height='15' alt='Tout décocher' />
-					</a>				
-				</span>
-			</th>
-			<th class="small" style="font-weight: normal;">
-				Le lien "adresse publique" est visible sur la partie publique<br />
-				<span class="noprint">
-					<a href="javascript:CocheColonne(5);changement();">
-						<img src='../images/enabled.png' width='15' height='15' alt='Tout cocher' />
-					</a>
-					/
-					<a href="javascript:DecocheColonne(5);changement();">
-						<img src='../images/disabled.png' width='15' height='15' alt='Tout décocher' />
-					</a>				
-				</span>
-			</th>
-			<th class="small" style="font-weight: normal;">
-				Le lien "adresse publique" est accompagné d'une message "En construction"<br />
-				<span class="noprint">
-					<a href="javascript:CocheColonne(6);changement();">
-						<img src='../images/enabled.png' width='15' height='15' alt='Tout cocher' />
-					</a>
-					/
-					<a href="javascript:DecocheColonne(6);changement();">
-						<img src='../images/disabled.png' width='15' height='15' alt='Tout décocher' />
-					</a>				
-				</span>
-			</th>
-			<th class="small" style="font-weight: normal;">
-				L'AID est visible des élèves<br />
-				<span class="noprint">
-					<a href="javascript:CocheColonne(7);changement();">
-						<img src='../images/enabled.png' width='15' height='15' alt='Tout cocher' />
-					</a>
-					/
-					<a href="javascript:DecocheColonne(7);changement();">
-						<img src='../images/disabled.png' width='15' height='15' alt='Tout décocher' />
-					</a>				
-				</span>
-			</th>
-<?php
-}
-// Colonne "supprimer
-//if (NiveauGestionAid($_SESSION["login"],$indice_aid) >= 5) {
-if ($NiveauGestionAid >= 5) {
-?>
-			<th>&nbsp;</th>
-<?php }
-if ($trouve_parent > 0) {
-?>
-			<th class="small">Sous-groupe de</th>
-<?php } ?>
-		</tr>
-<?php
+	$current_eleve_classe = sql_query1("SELECT classe FROM classes WHERE id='$id_classe'");
 
-$_SESSION['chemin_retour'] = $_SERVER['REQUEST_URI'];
-$i = 0;
-$alt=1;
-while ($i < $nombreligne) {
-    $aid_nom = @old_mysql_result($calldata, $i, "nom");
-    $aid_num = @old_mysql_result($calldata, $i, "numero");
-    $eleve_peut_modifier = @old_mysql_result($calldata, $i, "eleve_peut_modifier");
-    $prof_peut_modifier = @old_mysql_result($calldata, $i, "prof_peut_modifier");
-    $cpe_peut_modifier = @old_mysql_result($calldata, $i, "cpe_peut_modifier");
-    $fiche_publique = @old_mysql_result($calldata, $i, "fiche_publique");
-    $affiche_adresse1 = @old_mysql_result($calldata, $i, "affiche_adresse1");
-    $en_construction = @old_mysql_result($calldata, $i, "en_construction");
-    $visibilite_eleve = @old_mysql_result($calldata, $i, "visibilite_eleve");
-    if ($aid_num =='') {$aid_num='&nbsp;';}
-    $aid_id = @old_mysql_result($calldata, $i, "id");
-    $alt=$alt*(-1);
-    // Première colonne du numéro de l'AID
-?>
-		<tr class='lig<?php echo $alt; ?>'>
-<?php
-	$NiveauGestionAid_courant=NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id);
-	//if (NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 1) {
-	if ($NiveauGestionAid_courant >= 1) {
-?>
-			<td class='medium'><strong><?php echo $aid_num; ?></strong></td>
-<?php
+	//echo "<a href=\"index2.php\">Choisir une autre classe</a> | Classe : ".$current_eleve_classe." |</p>\n";
+
+	// ===========================================
+	// Ajout lien classe précédente / classe suivante
+	if($_SESSION['statut']=='scolarite') {
+		$sql = "SELECT DISTINCT c.id,c.classe FROM classes c, periodes p, j_scol_classes jsc WHERE p.id_classe = c.id  AND jsc.id_classe=c.id AND jsc.login='".$_SESSION['login']."' ORDER BY classe";
 	}
-	// Colonne du nom de l'AID
-	//if (NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 10) {
-	if ($NiveauGestionAid_courant >= 10) {
-		if ($activer_outils_comp == "y") {
-?>
-			<td class='medium'>
-				<a href='modif_fiches.php?aid_id=<?php echo $aid_id; ?>&amp;indice_aid=<?php echo $indice_aid; ?>&amp;action=modif&amp;retour=index2.php'>
-					<strong><?php 
-						if(trim($aid_nom)=="") {
-							echo "<span style='color:red'>ANOMALIE&nbsp;: Le nom est vide. Cliquez pour corriger</span>";
-						}
-						else {
-							echo $aid_nom;
-						}
-						?></strong>
-				</a>
-			</td>
-<?php
-		} else { ?>
-			<td class='medium'>
-				<a href='add_aid.php?action=modif_aid&amp;aid_id=<?php echo $aid_id; ?>&amp;indice_aid=<?php echo $indice_aid; ?>'>
-					<strong><?php echo $aid_nom; ?></strong>
-				</a>
-			</td>
-<?php
+	elseif($_SESSION['statut']=='professeur'){
+		//$sql="SELECT DISTINCT c.id,c.classe FROM classes c, periodes p, j_groupes_classes jgc, j_groupes_professeurs jgp WHERE p.id_classe = c.id AND jgc.id_classe=c.id AND jgp.id_groupe=jgc.id_groupe AND jgp.login='".$_SESSION['login']."' ORDER BY c.classe";
+
+		if ( (getSettingValue("GepiAccesMoyennesProf") != "yes") AND
+		(getSettingValue("GepiAccesMoyennesProfTousEleves") != "yes") AND
+		(getSettingValue("GepiAccesMoyennesProfToutesClasses") != "yes")
+		) {
+			$sql="SELECT DISTINCT c.id, c.classe FROM j_eleves_professeurs jep, classes c WHERE jep.id_classe=c.id AND jep.professeur='".$_SESSION['login']."';";
 		}
-	//} else if (NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 5) {
-	} else if ($NiveauGestionAid_courant >= 5) { 
-?>
-			<td class='medium'>
-				<a href='add_aid.php?action=modif_aid&amp;aid_id=<?php echo $aid_id; ?>&amp;indice_aid=<?php echo $indice_aid; ?>'>
-					<strong><?php echo $aid_nom; ?></strong>
-				</a>
-			</td>
-<?php 
-	//} else if (NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 1) { 
-	} else if ($NiveauGestionAid_courant >= 1) { 
-?>
-			<td class='medium'>
-				<strong><?php echo $aid_nom; ?></strong>
-			</td>
-<?php 
-	}
-	// colonne "Ajouter, supprimer des professeurs"
-	//if (NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 5) {
-	if ($NiveauGestionAid_courant >= 5) {
-		if (!((getSettingValue("num_aid_trombinoscopes")==$indice_aid) and (getSettingValue("active_module_trombinoscopes")=='y'))) {
-?>
-			<td class='medium noprint'>
-				<a href='modify_aid.php?flag=prof&amp;aid_id=<?php echo $aid_id; ?>&amp;indice_aid=<?php echo $indice_aid; ?>'>
-					Ajouter, supprimer des professeurs
-				</a>
-			</td>
-<?php
-		} 
-	} 
-	// colonne "Ajouter, supprimer des élèves"
-	//if (NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 1) {
-	if ($NiveauGestionAid_courant >= 1) {
-?>
-			<td class='medium noprint'>
-				<a href='modify_aid.php?flag=eleve&amp;aid_id=<?php echo $aid_id; ?>&amp;indice_aid=<?php echo $indice_aid; ?>'>
-					Ajouter, supprimer des élèves
-				</a>
-			</td>
- <?php } 
-	// colonne "Ajouter, supprimer des gestionnaires"
-	//if (NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 10) {
-	if ($NiveauGestionAid_courant >= 10) {
-		if (getSettingValue("active_mod_gest_aid")=="y") {
-?>
-			<td class='medium noprint'>
-				<a href='modify_aid.php?flag=prof_gest&amp;aid_id=<?php echo $aid_id; ?>&amp;indice_aid=<?php echo $indice_aid; ?>'>
-					Ajouter, supprimer des gestionnaires
-				</a>
-			</td>
-<?php
-		} 
-	} 
-	//if ((NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 10) and ($activer_outils_comp == "y")) {
-	if (($NiveauGestionAid_courant >= 10) and ($activer_outils_comp == "y")) {
-		// La fiche est-elle publique ?
-?>
-			<td class="center">
-				<input type="checkbox" 
-					   name="fiche_publique_<?php echo $aid_id; ?>" 
-					   value="y" 
-					   id="case_1_<?php echo $i; ?>"
-<?php					if ($fiche_publique == "y") {echo " checked = 'checked' ";} ?>
-					   />
-			</td>
- <?php  // Les élèves peuvent-ils modifier la fiche ? ?>
-			<td class="center">
-				<input type="checkbox" 
-					   name="eleve_peut_modifier_<?php echo $aid_id; ?>" 
-					   value="y" 
-					   id="case_2_<?php echo $i; ?>"
-<?php					if ($eleve_peut_modifier == "y") {echo " checked = 'checked' ";} ?>
-					   />
-			</td>
-<?php	// Les profs peuvent-ils modifier la fiche ? ?>
-			<td class="center">
-				<input type="checkbox" 
-					   name="prof_peut_modifier_<?php echo $aid_id; ?>" 
-					   value="y" 
-					   id="case_3_<?php echo $i; ?>"
-<?php					if ($prof_peut_modifier == "y") {echo " checked = 'checked' ";} ?>
-					   />
-			</td>
-<?php	// Les CPE peuvent-ils modifier la fiche ? ?>
-			<td class="center">
-				<input type="checkbox" 
-					   name="cpe_peut_modifier_<?php echo $aid_id; ?>"
-					   value="y" 
-					   id="case_4_<?php echo $i; ?>"
- <?php					if ($cpe_peut_modifier == "y") {echo " checked = 'checked' ";} ?>
-					   />
-			</td>
-<?php	// Le lien public est-il visible sur la partie publique ? ?>
-			<td class="center">
-				<input type="checkbox" 
-					   name="affiche_adresse1_<?php echo $aid_id; ?>" 
-					   value="y" 
-					   id="case_5_<?php echo $i; ?>"
- <?php					if ($affiche_adresse1 == "y") {echo " checked = 'checked' ";} ?>
-					   />
-			</td>
-<?php	// Avertissement "en construction" ?>
-			<td class="center">
-				<input type="checkbox" 
-					   name="en_construction_<?php echo $aid_id; ?>" 
-					   value="y" 
-					   id="case_6_<?php echo $i; ?>"
-<?php					if ($en_construction == "y") {echo " checked = 'checked' ";} ?>
-					   />
-			</td>
-<?php	// Visibilité élève/parent ?>
-			<td class="center">
-				<input type="checkbox" 
-					   name="visibilite_eleve_<?php echo $aid_id; ?>" 
-					   value="y" 
-					   id="case_7_<?php echo $i; ?>"
-<?php					if ($visibilite_eleve == "y") {echo " checked = 'checked' ";} ?>
-					   />
-			</td>
-<?php
-	}
-	// colonne "Supprimer"
-	//if (NiveauGestionAid($_SESSION["login"],$indice_aid,$aid_id) >= 5)  {
-	if ($NiveauGestionAid_courant >= 5)  {
-?>
-			<td class='medium'>
-				<a class="noprint" href='../lib/confirm_query.php?liste_cible=<?php echo $aid_id; ?>&amp;liste_cible3=<?php echo $indice_aid ?>&amp;action=del_aid<?php echo add_token_in_url() ?>'>
-					supprimer
-				</a>
-			</td>
-<?php
-	}
-	if ($trouve_parent > 0) {
-?>
-			<td>
-				<?php if (Extrait_info_parent ($aid_id) && Extrait_info_parent ($aid_id)->num_rows) {
-					echo Extrait_info_parent ($aid_id)->fetch_object()->nom;
-				} ?>
-			</td>
-<?php } ?>
-		</tr>
-<?php
-	$i++;
-}
-?>
-	</table>
-<?php
-//if ((NiveauGestionAid($_SESSION["login"],$indice_aid) >= 10) and ($activer_outils_comp == "y")) {
-if (($NiveauGestionAid >= 10) and ($activer_outils_comp == "y")) {
-?>
-	<p style="padding-bottom:1em;">
-		(*) Uniquement si l'administrateur a ouvert cette possibilité pour le projet concerné.
-	</p>
-	<div class="center" id='fixe'>
-		<p style="font-weight: bolder;  padding: .5em; ">
-			<input type="submit" name="Valider" />
-		</p>
-	</div>
-	<p>
-		<input type="hidden" name="indice_aid" value="<?php echo $indice_aid; ?>" />
-		<input type="hidden" name="is_posted" value="y" />
-	</p>
-	<?php echo add_token_field(); ?>
-</form>
-<script type='text/javascript'>
-  function CocheColonne(i) {
-	 for (var ki=0;ki<<?php echo $nombreligne; ?>;ki++) {
-		if(document.getElementById('case_'+i+'_'+ki)){
-			document.getElementById('case_'+i+'_'+ki).checked = true;
+		else {
+			$sql="SELECT DISTINCT c.id,c.classe FROM classes c, periodes p, j_groupes_classes jgc, j_groupes_professeurs jgp WHERE p.id_classe = c.id AND jgc.id_classe=c.id AND jgp.id_groupe=jgc.id_groupe AND jgp.login='".$_SESSION['login']."' ORDER BY c.classe";
 		}
-	 }
-  }
-  function DecocheColonne(i) {
-	 for (var ki=0;ki<<?php echo $nombreligne; ?>;ki++) {
-		if(document.getElementById('case_'+i+'_'+ki)){
-			document.getElementById('case_'+i+'_'+ki).checked = false;
+
+	}
+	elseif($_SESSION['statut']=='cpe'){
+		$sql="SELECT DISTINCT c.id,c.classe FROM classes c, periodes p, j_eleves_classes jec, j_eleves_cpe jecpe WHERE
+			p.id_classe = c.id AND
+			jec.id_classe=c.id AND
+			jec.periode=p.num_periode AND
+			jecpe.e_login=jec.login AND
+			jecpe.cpe_login='".$_SESSION['login']."'
+			ORDER BY classe";
+	}
+	else {
+		// Autres
+		$sql = "SELECT DISTINCT c.id,c.classe FROM classes c, periodes p WHERE p.id_classe = c.id ORDER BY classe";
+	}
+	$chaine_options_classes="";
+
+	$res_class_tmp=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res_class_tmp)>0){
+		$id_class_prec=0;
+		$id_class_suiv=0;
+		$temoin_tmp=0;
+		while($lig_class_tmp=mysqli_fetch_object($res_class_tmp)){
+			if($lig_class_tmp->id==$id_classe){
+				$chaine_options_classes.="<option value='$lig_class_tmp->id' selected='true'>$lig_class_tmp->classe</option>\n";
+				$temoin_tmp=1;
+				if($lig_class_tmp=mysqli_fetch_object($res_class_tmp)){
+					$chaine_options_classes.="<option value='$lig_class_tmp->id'>$lig_class_tmp->classe</option>\n";
+					$id_class_suiv=$lig_class_tmp->id;
+				}
+				else{
+					$id_class_suiv=0;
+				}
+			}
+			else {
+				$chaine_options_classes.="<option value='$lig_class_tmp->id'>$lig_class_tmp->classe</option>\n";
+			}
+			if($temoin_tmp==0){
+				$id_class_prec=$lig_class_tmp->id;
+			}
 		}
-	 }
-  }
-</script>
-<?php
+	}
+	// =================================
+	if(isset($id_class_prec)){
+		if($id_class_prec!=0){echo " | <a href='".$_SERVER['PHP_SELF']."?id_classe=$id_class_prec'>Classe précédente</a>";}
+	}
+	if($chaine_options_classes!="") {
+		echo " | Classe : <select name='id_classe' onchange=\"document.forms['form1'].submit();\">\n";
+		echo $chaine_options_classes;
+		echo "</select>\n";
+	}
+	if(isset($id_class_suiv)){
+		if($id_class_suiv!=0){echo " | <a href='".$_SERVER['PHP_SELF']."?id_classe=$id_class_suiv'>Classe suivante</a>";}
+	}
+	//fin ajout lien classe précédente / classe suivante
+	// ===========================================
+	//echo " | Classe : ".$current_eleve_classe."</p>\n";
+	echo "</p>\n";
+	echo "</form>\n";
+
+	if(!isset($_SESSION['vtn_pref_num_periode'])) {
+		$sql="SELECT * FROM preferences WHERE login='".$_SESSION['login']."' AND name LIKE 'vtn_pref_%';";
+		$get_pref=mysqli_query($GLOBALS["mysqli"], $sql);
+		if(mysqli_num_rows($get_pref)>0) {
+			while($lig_pref=mysqli_fetch_object($get_pref)) {
+				$_SESSION[$lig_pref->name]=$lig_pref->value;
+			}
+		}
+	}
+
+	echo "<form target=\"_blank\" name=\"visu_toutes_notes\" method=\"post\" action=\"visu_toutes_notes2.php\">\n";
+	echo add_token_field();
+	echo "<table border=\"1\" cellspacing=\"1\" cellpadding=\"10\" summary='Choix de la période'><tr>";
+	echo "<td valign=\"top\"><b>Choisissez&nbsp;la&nbsp;période&nbsp;:&nbsp;</b><br />\n";
+    /**
+     * Gestion des périodes
+     */
+	include "../lib/periodes.inc.php";
+	$i="1";
+	while ($i < $nb_periode) {
+		echo "<br />\n<input type=\"radio\" name=\"num_periode\" id='num_periode_$i' value=\"$i\" ";
+		if(isset($_SESSION['vtn_pref_num_periode'])) {
+			if($_SESSION['vtn_pref_num_periode']==$i) {echo "checked ";}
+		}
+		elseif ($i == 1) {echo "checked ";}
+		echo "/>&nbsp;";
+		echo "<label for='num_periode_$i' style='cursor:pointer;'>\n";
+		echo ucfirst($nom_periode[$i]);
+		echo "</label>\n";
+		$i++;
+	}
+	echo "<br />\n<input type=\"radio\" name=\"num_periode\" id='num_periode_annee' value=\"annee\" ";
+	if((isset($_SESSION['vtn_pref_num_periode']))&&($_SESSION['vtn_pref_num_periode']=='annee')) {echo "checked ";}
+	echo "/>&nbsp;";
+	echo "<label for='num_periode_annee' style='cursor:pointer;'>\n";
+	echo "Année entière";
+	echo "</label>\n";
+	echo "</td>\n";
+
+	echo "<td valign=\"top\">\n";
+    echo "<b>Paramètres d'affichage</b><br />\n";
+	echo "<input type=\"hidden\" name=\"id_classe\" value=\"".$id_classe."\" />";
+
+	echo "<table border='0' width='100%' summary='Paramètres'>\n";
+	echo "<tr>\n";
+	echo "<td>\n";
+
+		echo "<table border='0' summary='Paramètres'>\n";
+		echo "<tr>\n";
+		echo "<td>Largeur en pixel du tableau : </td>\n";
+		echo "<td><input type=text name=larg_tab size=3 ";
+		if(isset($_SESSION['vtn_pref_larg_tab'])) {
+			echo "value=\"".$_SESSION['vtn_pref_larg_tab']."\"";
+		}
+		else {
+			echo "value=\"680\"";
+		}
+		echo " /></td>\n";
+		echo "</tr>\n";
+		echo "<tr>\n";
+		echo "<td>Bords en pixel du tableau : </td>\n";
+		echo "<td><input type=text name=bord size=3 ";
+		if(isset($_SESSION['vtn_pref_bord'])) {
+			echo "value=\"".$_SESSION['vtn_pref_bord']."\"";
+		}
+		else {
+			echo "value=\"1\"";
+		}
+		echo " /></td>\n";
+		echo "</tr>\n";
+		echo "<tr>\n";
+		echo "<td>\n";
+		echo "<label for='couleur_alterne' style='cursor:pointer;'>\n";
+		echo "Couleurs de fond des lignes alternées : \n";
+		echo "</label>\n";
+		echo "</td>\n";
+		echo "<td><input type=\"checkbox\" name=\"couleur_alterne\" id=\"couleur_alterne\" value='y' ";
+		if(isset($_SESSION['vtn_pref_couleur_alterne'])) {
+			if($_SESSION['vtn_pref_couleur_alterne']=='y') {
+				echo "checked";
+			}
+		}
+		else {
+			echo "checked";
+		}
+		echo " /></td>\n";
+		echo "</tr>\n";
+		echo "</table>\n";
+
+	echo "</td>\n";
+	echo "<td>\n";
+
+		echo "<table border='0' summary='Champs'>\n";
+		echo "<tr>\n";
+		echo "<td><input type=\"checkbox\" name=\"aff_abs\" id=\"aff_abs\" value='y' ";
+		if(isset($_SESSION['vtn_pref_aff_abs'])) {
+			if($_SESSION['vtn_pref_aff_abs']=='y') {
+				echo "checked";
+			}
+		}
+		else {
+			echo "checked";
+		}
+		echo " /></td>\n";
+		echo "<td>\n";
+		echo "<label for='aff_abs' style='cursor:pointer;'>\n";
+		echo "Afficher les absences";
+		echo "</label>\n";
+		echo "</td>\n";
+		echo "</tr>\n";
+		echo "<tr>\n";
+		echo "<td><input type=\"checkbox\" name=\"aff_reg\" id=\"aff_reg\" value='y' ";
+		if(isset($_SESSION['vtn_pref_aff_reg'])) {
+			if($_SESSION['vtn_pref_aff_reg']=='y') {
+				echo "checked ";
+			}
+		}
+		else {
+			echo "checked ";
+		}
+		echo "/></td>\n";
+		echo "<td>\n";
+		echo "<label for='aff_reg' style='cursor:pointer;'>\n";
+		echo "Afficher le régime\n";
+		echo "</label>\n";
+		echo "</td>\n";
+		echo "</tr>\n";
+		echo "<tr>\n";
+		echo "<td><input type=\"checkbox\" name=\"aff_doub\" id=\"aff_doub\" value='y' ";
+		if(isset($_SESSION['vtn_pref_aff_doub'])) {
+			if($_SESSION['vtn_pref_aff_doub']=='y') {
+				echo "checked";
+			}
+		}
+		else {
+			echo "checked";
+		}
+		echo " /></td>\n";
+		echo "<td>\n";
+		echo "<label for='aff_doub' style='cursor:pointer;'>\n";
+		echo "Afficher la mention doublant\n";
+		echo "</label>\n";
+		echo "</td>\n";
+		echo "</tr>\n";
+
+		$affiche_rang = sql_query1("SELECT display_rang FROM classes WHERE id='".$id_classe."'");
+		// On teste la présence d'au moins un coeff pour afficher la colonne des coef
+		$test_coef = mysqli_num_rows(mysqli_query($GLOBALS["mysqli"], "SELECT coef FROM j_groupes_classes WHERE (id_classe='".$id_classe."' and coef > 0)"));
+
+		if (($affiche_rang == 'y') and ($test_coef != 0)) {
+			echo "<tr>\n";
+			echo "<td><input type=\"checkbox\" name=\"aff_rang\" id=\"aff_rang\" value='y' ";
+			if(isset($_SESSION['vtn_pref_aff_rang'])) {
+				if($_SESSION['vtn_pref_aff_rang']=='y') {
+					echo "checked";
+				}
+			}
+			else {
+				echo "checked";
+			}
+			echo " /></td>\n";
+			echo "<td>\n";
+			echo "<label for='aff_rang' style='cursor:pointer;'>\n";
+			echo "Afficher le rang des élèves\n";
+			echo "</label>\n";
+			echo "</td>\n";
+			echo "</tr>\n";
+		}
+
+		echo "<tr>\n";
+		echo "<td valign='top'><input type=\"checkbox\" name=\"aff_date_naiss\" id=\"aff_date_naiss\" /></td>\n";
+		echo "<td>\n";
+		echo "<label for='aff_date_naiss' style='cursor:pointer;'>\n";
+		echo "Afficher la date de naissance des élèves\n";
+		echo "</label>\n";
+		echo "</td>\n";
+		echo "</tr>\n";
+		echo "</table>\n";
+
+	echo "</td>\n";
+	echo "</tr>\n";
+	echo "</table>\n";
+
+
+	echo "<br />\n<center><input type=\"submit\" name=\"ok\" value=\"Valider\" /></center>\n";
+	echo "<br />\n<span class='small'>Remarque : le tableau des notes s'affiche sans en-tête et dans une nouvelle page. Pour revenir à cet écran, il vous suffit de fermer la fenêtre du tableau des notes.</span>\n";
+	echo "</td></tr>\n</table>\n";
+
+	//============================================
+	// Colorisation des résultats
+	echo "<input type='checkbox' id='vtn_coloriser_resultats' name='vtn_coloriser_resultats' value='y' onchange=\"display_div_coloriser()\" ";
+	if(isset($_SESSION['vtn_pref_coloriser_resultats'])) {
+		if($_SESSION['vtn_pref_coloriser_resultats']=='y') {
+			echo "checked";
+		}
+	}
+	else {
+		echo "checked";
+	}
+	echo "/><label for='vtn_coloriser_resultats'> Coloriser les résultats.</label><br />\n";
+	
+
+	// Tableau des couleurs HTML:
+	$chaine_couleurs='"aliceblue","antiquewhite","aqua","aquamarine","azure","beige","bisque","black","blanchedalmond","blue","blueviolet","brown","burlywood","cadetblue","chartreuse","chocolate","coral","cornflowerblue","cornsilk","crimson","cyan","darkblue","darkcyan","darkgoldenrod","darkgray","darkgreen","darkkhaki","darkmagenta","darkolivegreen","darkorange","darkorchid","darkred","darksalmon","darkseagreen","darkslateblue","darkslategray","darkturquoise","darkviolet","deeppink","deepskyblue","dimgray","dodgerblue","firebrick","floralwhite","forestgreen","fuchsia","gainsboro","ghostwhite","gold","goldenrod","gray","green","greenyellow","honeydew","hotpink","indianred","indigo","ivory","khaki","lavender","lavenderblush","lawngreen","lemonchiffon","lightblue","lightcoral","lightcyan","lightgoldenrodyellow","lightgreen","lightgrey","lightpink","lightsalmon","lightseagreen","lightskyblue","lightslategray","lightsteelblue","lightyellow","lime","limegreen","linen","magenta","maroon","mediumaquamarine","mediumblue","mediumorchid","mediumpurple","mediumseagreen","mediumslateblue","mediumspringgreen","mediumturquoise","mediumvioletred","midnightblue","mintcream","mistyrose","moccasin","navajowhite","navy","oldlace","olive","olivedrab","orange","orangered","orchid","palegoldenrod","palegreen","paleturquoise","palevioletred","papayawhip","peachpuff","peru","pink","plum","powderblue","purple","red","rosybrown","royalblue","saddlebrown","salmon","sandybrown","seagreen","seashell","sienna","silver","skyblue","slateblue","slategray","snow","springgreen","steelblue","tan","teal","thistle","tomato","turquoise","violet","wheat","white","whitesmoke","yellow","yellowgreen"';
+
+	$tabcouleur=Array("aliceblue","antiquewhite","aqua","aquamarine","azure","beige","bisque","black","blanchedalmond","blue","blueviolet","brown","burlywood","cadetblue","chartreuse","chocolate","coral","cornflowerblue","cornsilk","crimson","cyan","darkblue","darkcyan","darkgoldenrod","darkgray","darkgreen","darkkhaki","darkmagenta","darkolivegreen","darkorange","darkorchid","darkred","darksalmon","darkseagreen","darkslateblue","darkslategray","darkturquoise","darkviolet","deeppink","deepskyblue","dimgray","dodgerblue","firebrick","floralwhite","forestgreen","fuchsia","gainsboro","ghostwhite","gold","goldenrod","gray","green","greenyellow","honeydew","hotpink","indianred","indigo","ivory","khaki","lavender","lavenderblush","lawngreen","lemonchiffon","lightblue","lightcoral","lightcyan","lightgoldenrodyellow","lightgreen","lightgrey","lightpink","lightsalmon","lightseagreen","lightskyblue","lightslategray","lightsteelblue","lightyellow","lime","limegreen","linen","magenta","maroon","mediumaquamarine","mediumblue","mediumorchid","mediumpurple","mediumseagreen","mediumslateblue","mediumspringgreen","mediumturquoise","mediumvioletred","midnightblue","mintcream","mistyrose","moccasin","navajowhite","navy","oldlace","olive","olivedrab","orange","orangered","orchid","palegoldenrod","palegreen","paleturquoise","palevioletred","papayawhip","peachpuff","peru","pink","plum","powderblue","purple","red","rosybrown","royalblue","saddlebrown","salmon","sandybrown","seagreen","seashell","sienna","silver","skyblue","slateblue","slategray","snow","springgreen","steelblue","tan","teal","thistle","tomato","turquoise","violet","wheat","white","whitesmoke","yellow","yellowgreen");
+	
+	echo "<div id='div_coloriser'>\n";
+	echo "<table id='table_couleur' class='boireaus' summary='Coloriser les résultats'>\n";
+	echo "<thead>\n";
+		echo "<tr>\n";
+		echo "<th><a href='#colorisation_resultats' onclick='add_tr_couleur();return false;'>Borne<br />supérieure</a></th>\n";
+		echo "<th>Couleur texte</th>\n";
+		echo "<th>Couleur cellule</th>\n";
+		echo "<th>Supprimer</th>\n";
+		echo "</tr>\n";
+	echo "</thead>\n";
+	echo "<tbody id='table_body_couleur'>\n";
+
+	$vtn_borne_couleur=array();
+	$sql="SELECT * FROM preferences WHERE login='".$_SESSION['login']."' AND name LIKE 'vtn_%' ORDER BY name;";
+	$res_pref=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res_pref)>0) {
+		while($lig_pref=mysqli_fetch_object($res_pref)) {
+			if(mb_substr($lig_pref->name,0,17)=='vtn_couleur_texte') {
+				$vtn_couleur_texte[]=$lig_pref->value;
+			}
+			elseif(mb_substr($lig_pref->name,0,19)=='vtn_couleur_cellule') {
+				$vtn_couleur_cellule[]=$lig_pref->value;
+			}
+			elseif(mb_substr($lig_pref->name,0,17)=='vtn_borne_couleur') {
+				$vtn_borne_couleur[]=$lig_pref->value;
+			}
+		}
+
+		/**
+         *
+         * @global type $cpt_couleur 
+         * @global array $tabcouleur
+         * @global type $vtn_borne_couleur
+         * @global type $vtn_couleur_texte
+         * @global type $vtn_couleur_cellule 
+         */
+		function add_tr_couleur() {
+			global $cpt_couleur, $tabcouleur, $vtn_borne_couleur, $vtn_couleur_texte, $vtn_couleur_cellule;
+
+			$cpt_tmp=$cpt_couleur+1;
+
+			$alt=pow((-1),$cpt_couleur);
+			echo "<tr id='tr_couleur_$cpt_tmp' class='lig$alt'>\n";
+			echo "<td>\n";
+			echo "<input size='2' value='".$vtn_borne_couleur[$cpt_couleur]."' id='vtn_borne_couleur_$cpt_tmp' name='vtn_borne_couleur[]' type='text'>\n";
+			echo "</td>\n";
+
+			echo "<td>\n";
+			echo "<select id='vtn_couleur_texte_$cpt_tmp' name='vtn_couleur_texte[]'>\n";
+			echo "<option value=''>---</option>\n";
+			for($i=0;$i<count($tabcouleur);$i++) {
+				echo "<option style='background-color: $tabcouleur[$i];' value='$tabcouleur[$i]'";
+				if($tabcouleur[$i]==$vtn_couleur_texte[$cpt_couleur]) {echo " selected='true'";}
+				echo ">$tabcouleur[$i]</option>\n";
+			}
+			echo "</select>\n";
+			echo "</td>\n";
+
+			echo "<td>\n";
+			echo "<select id='vtn_couleur_cellule_$cpt_tmp' name='vtn_couleur_cellule[]'>\n";
+			echo "<option value=''>---</option>\n";
+			for($i=0;$i<count($tabcouleur);$i++) {
+				echo "<option style='background-color: $tabcouleur[$i];' value='$tabcouleur[$i]'";
+				if($tabcouleur[$i]==$vtn_couleur_cellule[$cpt_couleur]) {echo " selected='true'";}
+				echo ">$tabcouleur[$i]</option>\n";
+			}
+			echo "</select>\n";
+			echo "</td>\n";
+
+			echo "<td>\n";
+			echo "<a href='#colorisation_resultats' onclick='suppr_ligne_couleur($cpt_tmp);return false;'><img src='../images/delete16.png' height='16' width='16' alt='Supprimer la ligne' /></a>\n";
+			echo "</td>\n";
+
+			echo "</tr>\n";
+		}
+
+		for($cpt_couleur=0;$cpt_couleur<count($vtn_borne_couleur);$cpt_couleur++) {add_tr_couleur();}
+		$cpt_couleur++;
+
+		echo "</tbody>\n";
+		echo "</table>\n";
+		echo "<a name='colorisation_resultats'></a>\n";
+	
+		echo "<script type='text/javascript'>
+		// Couleurs prises en compte dans colorisation_visu_toutes_notes.js
+		var tab_couleur=new Array($chaine_couleurs);
+
+		var cpt_couleur=$cpt_couleur;
+
+		//retouches_tab_couleur();
+\n";
+
+	}
+	else {
+		echo "</tbody>\n";
+		echo "</table>\n";
+		echo "<a name='colorisation_resultats'></a>\n";
+	
+		echo "<script type='text/javascript'>
+		// Couleurs prises en compte dans colorisation_visu_toutes_notes.js
+		var tab_couleur=new Array($chaine_couleurs);\n";
+
+		echo "	// Pour démarrer avec trois lignes:
+	add_tr_couleur();
+	add_tr_couleur();
+	add_tr_couleur();
+	vtn_couleurs_par_defaut();\n";
+	}
+	echo "</script>\n";
+//}
+
+	// 20140331
+	echo "<br /><p><strong>Paramètres de l'export PDF&nbsp;:</strong><br /><input type='checkbox' id='forcer_hauteur_ligne_pdf' name='forcer_hauteur_ligne_pdf' value='y' ";
+	if(getPref($_SESSION["login"], "visu_toutes_notes_forcer_h_cell_pdf", "n")=="y") {
+		echo "checked ";
+	}
+	echo "/><label for='forcer_hauteur_ligne_pdf'> Forcer la hauteur des lignes du tableau PDF à </label><input type='text' name='visu_toutes_notes_h_cell_pdf' size='2' value='".getPref($_SESSION["login"], "visu_toutes_notes_h_cell_pdf", 10)."' onkeydown=\"clavier_2(this.id,event,1,20);\" autocomplete=\"off\" /><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<em>sinon Gepi calcule au mieux la hauteur de ligne</em>)</p>\n";
+
+	echo "<p><br /></p>\n";
+	echo "</div>\n";
+
+	echo "<script type='text/javascript'>
+function display_div_coloriser() {
+if(document.getElementById('vtn_coloriser_resultats').checked==true) {
+document.getElementById('div_coloriser').style.display='';
 }
-require("../lib/footer.inc.php");
+else {
+document.getElementById('div_coloriser').style.display='none';
+}
+}
+display_div_coloriser();
+</script>\n";
+
+
+
+	echo "</form>\n";
+} else {
+	echo "<p class='bold'><a href='../accueil.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Accueil</a>";
+
+	echo "</p>\n";
+	echo "<p><b>Visualiser les moyennes des carnets de notes par classe :</b><br />\n";
+
+	if($_SESSION['statut'] == 'scolarite'){
+		$appel_donnees = mysqli_query($GLOBALS["mysqli"], "SELECT DISTINCT c.* FROM classes c, periodes p, j_scol_classes jsc WHERE p.id_classe = c.id  AND jsc.id_classe=c.id AND jsc.login='".$_SESSION['login']."' ORDER BY classe");
+	}
+	elseif($_SESSION['statut'] == 'professeur' and getSettingValue("GepiAccesMoyennesProfToutesClasses") != "yes"){
+		$appel_donnees = mysqli_query($GLOBALS["mysqli"], "SELECT DISTINCT c.* FROM classes c, periodes p, j_groupes_classes jgc, j_groupes_professeurs jgp WHERE p.id_classe = c.id AND jgc.id_classe=c.id AND jgp.id_groupe=jgc.id_groupe AND jgp.login='".$_SESSION['login']."' ORDER BY c.classe");
+	}
+	elseif($_SESSION['statut'] == 'professeur' and getSettingValue("GepiAccesMoyennesProfToutesClasses") == "yes") {
+		$appel_donnees = mysqli_query($GLOBALS["mysqli"], "SELECT DISTINCT c.* FROM classes c  ORDER BY c.classe");
+	}
+	elseif($_SESSION['statut'] == 'cpe'){
+		$appel_donnees = mysqli_query($GLOBALS["mysqli"], "SELECT DISTINCT c.* FROM classes c, periodes p WHERE p.id_classe = c.id  ORDER BY classe");
+	}
+	else {
+		// Autres
+		$appel_donnees = mysqli_query($GLOBALS["mysqli"], "SELECT DISTINCT c.* FROM classes c, periodes p WHERE p.id_classe = c.id ORDER BY classe");
+	}
+
+	$lignes = mysqli_num_rows($appel_donnees);
+
+	if($lignes==0){
+		echo "<p>Aucune classe ne vous est attribuée.<br />Contactez l'administrateur pour qu'il effectue le paramétrage approprié dans la Gestion des classes.</p>\n";
+	}
+	else{
+		$i = 0;
+		unset($tab_lien);
+		unset($tab_txt);
+		while ($i < $lignes){
+			$tab_lien[$i] = $_SERVER['PHP_SELF']."?id_classe=".old_mysql_result($appel_donnees, $i, "id");
+			$tab_txt[$i] = old_mysql_result($appel_donnees, $i, "classe");
+			$i++;
+
+		}
+		tab_liste($tab_txt,$tab_lien,3);
+	}
+}
+echo "<p><i>Remarque:</i> Les moyennes visualisées ici sont des photos à un instant t de ce qui a été saisi par les professeurs.<br />\n";
+echo "Cela ne correspond pas nécessairement à ce qui apparaitra sur le bulletin après saisie d'autres résultats et ajustements éventuels des coefficients.</p>\n";
+if ($_SESSION['statut'] == "professeur"
+	AND getSettingValue("GepiAccesMoyennesProfToutesClasses") != "yes"
+	AND getSettingValue("GepiAccesMoyennesProfToutesTousEleves") != "yes") {
+		echo "<p>Si vous n'enseignez pas à des classes entières, seuls les élèves auxquels vous enseignez apparaîtront dans la liste, et les moyennes calculés ne prendront en compte que les élèves affichés.</p>";
+	}
+
+/**
+ * inclusion du pied de page
+ */
+require ("../lib/footer.inc.php");
+?>
