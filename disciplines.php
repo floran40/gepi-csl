@@ -1,5 +1,8 @@
 <?php
+
+@set_time_limit(0);
 /*
+ * $Id$
  *
  * Copyright 2001, 2011 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
  *
@@ -22,166 +25,206 @@
 
 // Initialisations files
 require_once("../lib/initialisations.inc.php");
+extract($_POST, EXTR_OVERWRITE);
 
 // Resume session
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-	die();
+header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+die();
 } else if ($resultat_session == '0') {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+die();
 }
+
+// Page bourrinée... la gestion du token n'est pas faite... et ne sera faite que si quelqu'un utilise encore ce mode d'initialisation et le manifeste sur la liste de diffusion gepi-users
+check_token();
+
+$liste_tables_del = array(
+//"absences",
+//"aid",
+//"aid_appreciations",
+//"aid_config",
+//"avis_conseil_classe",
+//"classes",
+//"droits",
+//"eleves",
+//"responsables",
+//"etablissements",
+"groupes",
+//"j_aid_eleves",
+//"j_aid_utilisateurs",
+//"j_eleves_classes",
+//"j_eleves_etablissements",
+"j_eleves_groupes",
+"j_groupes_matieres",
+"j_groupes_professeurs",
+"j_groupes_classes",
+"j_signalement",
+//"j_eleves_professeurs",
+//"j_eleves_regime",
+//"j_professeurs_matieres",
+//"log",
+//"matieres",
+"matieres_appreciations",
+"matieres_notes",
+"matieres_appreciations_grp",
+"matieres_appreciations_tempo",
+//"periodes",
+"tempo2",
+//"temp_gep_import",
+"tempo",
+//"utilisateurs",
+"cn_cahier_notes",
+"cn_conteneurs",
+"cn_devoirs",
+"cn_notes_conteneurs",
+"cn_notes_devoirs",
+//"setting"
+);
+
 
 if (!checkAccess()) {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+die();
 }
-
-include("../lib/initialisation_annee.inc.php");
-$liste_tables_del = $liste_tables_del_etape_matieres;
-
 
 //**************** EN-TETE *****************
 $titre_page = "Outil d'initialisation de l'année : Importation des matières";
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
+?>
+<p class=bold>|<a href="index.php">Retour accueil initialisation</a>|</p>
 
-echo "<p class=bold><a href='../init_scribe/index.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a></p>";
+<?php
 
-if (isset($_POST['is_posted'])) {
-	check_token(false);
-    // L'admin a validé la procédure, on procède donc...
-    include "../lib/eole_sync_functions.inc.php";
-    // On commence par récupérer toutes les matières depuis le LDAP
-    $ldap_server = new LDAPServer;
-    $sr = ldap_search($ldap_server->ds,$ldap_server->base_dn,"(description=Matiere*)");
-    $info = ldap_get_entries($ldap_server->ds,$sr);
+// On vérifie si l'extension d_base est active
+verif_active_dbase();
 
+echo "<center><h3 class='gepi'>Troisième phase d'initialisation<br />Importation des matières</h3></center>";
 
-    if ($_POST['record'] == "yes") {
-        // Suppression des données présentes dans les tables en lien avec les matières
-        /* NON! On ne fait qu'une mise à jour de la liste, le cas échéant...
-        $j=0;
-        while ($j < count($liste_tables_del)) {
-            if (old_mysql_result(mysql_query("SELECT count(*) FROM $liste_tables_del[$j]"),0)!=0) {
-                $del = @mysql_query("DELETE FROM $liste_tables_del[$j]");
-            }
-            $j++;
+if (!isset($step1)) {
+    $j=0;
+    $flag=0;
+    while (($j < count($liste_tables_del)) and ($flag==0)) {
+        if (old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM $liste_tables_del[$j]"),0)!=0) {
+            $flag=1;
         }
-        */
+        $j++;
+    }
+    if ($flag != 0){
+        echo "<p><b>ATTENTION ...</b><br />";
+        echo "Des données concernant les matières sont actuellement présentes dans la base GEPI<br /></p>";
+        echo "<p>Si vous poursuivez la procédure les données telles que notes, appréciations, ... seront effacées.</p>";
+        echo "<p>Seules la table contenant les matières et la table mettant en relation les matières et les professeurs seront conservées.</p>";
 
-        $new_matieres = array();
-        for ($i=0;$i<$info["count"];$i++) {
+        echo "<form enctype='multipart/form-data' action='disciplines.php' method=post>";
+        echo "<input type=hidden name='step1' value='y' />";
+        echo "<input type='submit' name='confirm' value='Poursuivre la procédure' />";
+        echo "</form>";
+		echo "<p><br /></p>\n";
+		require("../lib/footer.inc.php");
+        die();
+    }
+}
 
-            $matiere = $info[$i]["cn"][0];
-            $matiere = traitement_magic_quotes(corriger_caracteres(trim($matiere)));
-            $matiere = preg_replace("/[^A-Za-z0-9.\-]/","",strtoupper($matiere));
-            $get_matieres = mysqli_query($GLOBALS["mysqli"], "SELECT matiere FROM matieres");
-            $nbmat = mysqli_num_rows($get_matieres);
-            $matieres = array();
-            for($j=0;$j<$nbmat;$j++) {
-                $matieres[] = old_mysql_result($get_matieres, $j, "matiere");
-            }
-
-            if (!in_array($matiere, $matieres)) {
-                $reg_matiere = mysqli_query($GLOBALS["mysqli"], "INSERT INTO matieres SET matiere='".$matiere."',nom_complet='".($_POST['reg_nom_complet'][$matiere])."', priority='11',matiere_aid='n',matiere_atelier='n'");
-            } else {
-                $reg_matiere = mysqli_query($GLOBALS["mysqli"], "UPDATE matieres SET nom_complet='".($_POST['reg_nom_complet'][$matiere])."' WHERE matiere = '" . $matiere . "'");
-            }
-            if (!$reg_matiere) echo "<p>Erreur lors de l'enregistrement de la matière $matiere.";
-            $new_matieres[] = $matiere;
-
-            // On regarde maintenant les affectations professeur/matière
-            for($k=0;$k<$info[$i]["memberuid"]["count"];$k++) {
-                $member = $info[$i]["memberuid"][$k];
-                $test = old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM j_professeurs_matieres WHERE (id_professeur = '" . $member . "' and id_matiere = '" . $matiere . "')"), 0);
-                if ($test == 0) {
-                    $res = mysqli_query($GLOBALS["mysqli"], "INSERT into j_professeurs_matieres SET id_professeur = '" . $member . "', id_matiere = '" . $matiere . "'");
-                }
-            }
-
+if (!isset($is_posted)) {
+    $j=0;
+    while ($j < count($liste_tables_del)) {
+        if (old_mysql_result(mysqli_query($GLOBALS["mysqli"], "SELECT count(*) FROM $liste_tables_del[$j]"),0)!=0) {
+            $del = @mysqli_query($GLOBALS["mysqli"], "DELETE FROM $liste_tables_del[$j]");
         }
-
-        // On efface les matières qui ne sont plus utilisées
-
-        $to_remove = array_diff($matieres, $new_matieres);
-
-        foreach($to_remove as $delete) {
-            $res = mysqli_query($GLOBALS["mysqli"], "DELETE from matieres WHERE matiere = '" . $delete . "'");
-            $res2 = mysqli_query($GLOBALS["mysqli"], "DELETE from j_professeurs_matieres WHERE id_matiere = '" . $delete . "'");
-        }
-
-	// Ménage sur l'ordre des groupes dans l'affichage simplifié prof:
-	// Sinon, on peut se retrouver avec des rangs aberrants liés à des groupes qui n'existent plus dans la table groupes.
-	$sql="DELETE FROM preferences WHERE name LIKE 'accueil_simpl_id_groupe_order_%';";
-	$del=mysqli_query($GLOBALS["mysqli"], $sql);
-
-        echo "<p>Opération effectuée.</p>";
-        echo "<p>Vous pouvez vérifier l'importation en allant sur la page de <a href='../matieres/index.php'>gestion des matières</a>.</p>";
-
-    } elseif ($_POST['record'] == "no") {
-
-            echo "<form enctype='multipart/form-data' action='disciplines.php' method=post name='formulaire'>";
-			echo add_token_field();
-            echo "<input type=hidden name='record' value='yes'>";
-            echo "<input type=hidden name='is_posted' value='yes'>";
-
-            echo "<p>Les matières en vert indiquent des matières déjà existantes dans la base GEPI.<br />Les matières en rouge indiquent des matières nouvelles et qui vont être ajoutées à la base GEPI.<br /></p>";
-            echo "<p>Attention !!! Il n'y a pas de tests sur les champs entrés. Soyez vigilant à ne pas mettre des caractères spéciaux dans les champs ...</p>";
-            echo "<p>Essayez de remplir tous les champs, cela évitera d'avoir à le faire ultérieurement.</p>";
-            echo "<p>N'oubliez pas <b>d'enregistrer les données</b> en cliquant sur le bouton en bas de la page<br /><br />";
-            echo "<br/>";
-            echo "<center>";
-            echo "<table border=1 cellpadding=2 cellspacing=2>";
-            echo "<tr><td><p class=\"small\">Identifiant de la matière</p></td><td><p class=\"small\">Nom complet</p></td></tr>";
-            for ($i=0;$i<$info["count"];$i++) {
-                $matiere = $info[$i]["cn"][0];
-                $matiere = traitement_magic_quotes(corriger_caracteres(trim($matiere)));
-                $nom_court = preg_replace("/[^A-Za-z0-9.\-]/","",strtoupper($matiere));
-                $nom_long = htmlspecialchars($matiere);
-                $test_exist = mysqli_query($GLOBALS["mysqli"], "SELECT * FROM matieres WHERE matiere='$nom_court'");
-                $nb_test_matiere_exist = mysqli_num_rows($test_exist);
-
-                if ($nb_test_matiere_exist==0) {
-                    $disp_nom_court = "<font color=red>".$nom_court."</font>";
-                } else {
-                    $disp_nom_court = "<font color=green>".$nom_court."</font>";
-                }
-                echo "<tr>";
-                echo "<td>";
-                echo "<p><b><center>$disp_nom_court</center></b></p>";
-                echo "";
-                echo "</td>";
-                echo "<td>";
-                echo "<input type=text name='reg_nom_complet[$nom_court]' value=\"".$nom_long."\">\n";
-                echo "</td></tr>";
-            }
-            echo "</table>\n";
-            echo "</center>";
-            echo "<center><input type='submit' value='Enregistrer les données'></center>\n";
-            echo "</form>\n";
+        $j++;
     }
 
-} else {
-
-    echo "<p><b>ATTENTION ...</b><br />";
-    echo "<p>Si vous poursuivez la procédure les données telles que notes, appréciations, ... seront effacées.</p>";
-    echo "<p>Seules la table contenant les matières et la table mettant en relation les matières et les professeurs seront conservées.</p>";
-    echo "<p>L'opération d'importation des matières depuis le LDAP de Scribe va effectuer les opérations suivantes :</p>";
-    echo "<ul>";
-    echo "<li>Ajout ou mise à jour de chaque matières présente dans le LDAP</li>";
-    echo "<li>Association professeurs <-> matières</li>";
-    echo "</ul>";
+    echo "<p><b>ATTENTION ...</b><br />Vous ne devez procéder à cette opération uniquement si la constitution des classes a été effectuée !</p>";
+    echo "<p>Importation du fichier <b>F_tmt.dbf</b> contenant les données relatives aux matières : veuillez préciser le nom complet du fichier <b>F_tmt.dbf</b>.";
     echo "<form enctype='multipart/form-data' action='disciplines.php' method=post>";
-	echo add_token_field();
-    echo "<input type=hidden name='is_posted' value='yes'>";
-    echo "<input type=hidden name='record' value='no'>";
-
-    echo "<p>Etes-vous sûr de vouloir continuer ?</p>";
-    echo "<br/>";
-    echo "<input type='submit' value='Je suis sûr'>";
+    echo "<input type=hidden name='is_posted' value='yes' />";
+    echo "<input type=hidden name='step1' value='y' />";
+    echo "<p><input type='file' size='80' name='dbf_file' />";
+    echo "<p><input type=submit value='Valider' />";
     echo "</form>";
+
+} else {
+    $dbf_file = isset($_FILES["dbf_file"]) ? $_FILES["dbf_file"] : NULL;
+    if(mb_strtoupper($dbf_file['name']) == "F_TMT.DBF") {
+        $fp = dbase_open($dbf_file['tmp_name'], 0);
+        if(!$fp) {
+            echo "<p>Impossible d'ouvrir le fichier dbf</p>";
+            echo "<p><a href='disciplines.php'>Cliquer ici </a> pour recommencer !</p>";
+        } else {
+            // on constitue le tableau des champs à extraire
+            $tabchamps = array("MATIMN","MATILC");
+
+            $nblignes = dbase_numrecords($fp); //number of rows
+            $nbchamps = dbase_numfields($fp); //number of fields
+
+            if (@dbase_get_record_with_names($fp,1)) {
+                $temp = @dbase_get_record_with_names($fp,1);
+            } else {
+                echo "<p>Le fichier sélectionné n'est pas valide !<br />";
+                echo "<a href='disciplines.php'>Cliquer ici </a> pour recommencer !</p>";
+                die();
+            }
+
+            $nb = 0;
+            foreach($temp as $key => $val){
+                $en_tete[$nb] = "$key";
+                $nb++;
+            }
+
+            // On range dans tabindice les indices des champs retenus
+            for ($k = 0; $k < count($tabchamps); $k++) {
+                for ($i = 0; $i < count($en_tete); $i++) {
+                    if ($en_tete[$i] == $tabchamps[$k]) {
+                        $tabindice[] = $i;
+                    }
+                }
+            }
+            echo "<p>Dans le tableau ci-dessous, les identifiants en rouge correspondent à des nouvelles matières dans la base GEPI. les identifiants en vert correspondent à des identifiants de matières détectés dans le fichier GEP mais déjà présents dans la base GEPI.<br /><br />Il est possible que certaines matières ci-dessous, bien que figurant dans le fichier GEP, ne soient pas utilisées dans votre établissement cette année. C'est pourquoi il vous sera proposé en fin de procédure d'initialsation, un nettoyage de la base afin de supprimer ces données inutiles.</p>";
+            echo "<table border=1 cellpadding=2 cellspacing=2>";
+            echo "<tr><td><p class=\"small\">Identifiant de la matière</p></td><td><p class=\"small\">Nom complet</p></td></tr>";
+
+
+            $nb_reg_no = 0;
+            for($k = 1; ($k < $nblignes+1); $k++){
+                $ligne = dbase_get_record($fp,$k);
+                for($i = 0; $i < count($tabchamps); $i++) {
+                    $affiche[$i] = traitement_magic_quotes(corriger_caracteres(dbase_filter(trim($ligne[$tabindice[$i]]))));
+                }
+                $verif = mysqli_query($GLOBALS["mysqli"], "select matiere, nom_complet from matieres where matiere='$affiche[0]'");
+                $resverif = mysqli_num_rows($verif);
+                if($resverif == 0) {
+                    $req = mysqli_query($GLOBALS["mysqli"], "insert into matieres set matiere='$affiche[0]', nom_complet='$affiche[1]', priority='0',matiere_aid='n',matiere_atelier='n'");
+                    if(!$req) {
+                        $nb_reg_no++; echo mysqli_error($GLOBALS["mysqli"]);
+                    } else {
+                        echo "<tr><td><p><font color='red'>$affiche[0]</font></p></td><td><p>$affiche[1]</p></td></tr>";
+                    }
+                } else {
+                    $nom_complet = old_mysql_result($verif,0,'nom_complet');
+                    echo "<tr><td><p><font color='green'>$affiche[0]</font></p></td><td><p>$nom_complet</p></td></tr>";
+                }
+            }
+            echo "</table>";
+            dbase_close($fp);
+            if ($nb_reg_no != 0) {
+                echo "<p>Lors de l'enregistrement des données il y a eu $nb_reg_no erreurs. Essayez de trouvez la cause de l'erreur et recommencez la procédure avant de passer à l'étape suivante.";
+            } else {
+                echo "<p>L'importation des matières dans la base GEPI a été effectuée avec succès !<br />Vous pouvez procéder à la quatrième phase d'importation des professeurs.</p>";
+            }
+            echo "<center><p><a href='professeurs.php'>Importation des professeurs</a></p></center>";
+        }
+    } else if (trim($dbf_file['name'])=='') {
+        echo "<p>Aucun fichier n'a été sélectionné !<br />";
+        echo "<a href='disciplines.php'>Cliquer ici </a> pour recommencer !</p>";
+
+    } else {
+        echo "<p>Le fichier sélectionné n'est pas valide !<br />";
+        echo "<a href='disciplines.php'>Cliquer ici </a> pour recommencer !</p>";
+    }
 }
+echo "<p><br /></p>\n";
 require("../lib/footer.inc.php");
 ?>
