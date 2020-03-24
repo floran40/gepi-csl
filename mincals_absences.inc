@@ -1,5 +1,6 @@
 <?php
 
+// $Id$
 
 function minicals($year, $month, $day, $id_classe, $type, $dmy) {
 
@@ -43,12 +44,12 @@ class Calendar
     function getCalendarLink($month, $year, $id_classe, $type)
     {
         $day=1;
-    if ($this->dmy=='gestion_absences') return $this->dmy.".php?year=$year&month=$month&day=$day&id_classe=$id_classe&type=$type";
+    if ($this->dmy=='gestion_absences') return $this->dmy.".php?year=$year&amp;month=$month&amp;day=$day&amp;id_classe=$id_classe&amp;type=$type";
     }
 
    function getDateLink($day, $month, $year) {
     global $vocab;
-      if ($this->dmy=='gestion_absences') return "<a title=\"Voir le cahier de textes pour cette journée\" href=".$this->dmy.".php?year=$year&month=$month&day=$day&id_classe=".$this->id_classe."&type=".$this->type;
+      if ($this->dmy=='gestion_absences') return "<a title=\"Voir le cahier de texte pour cette journée\" href=\"".$this->dmy.".php?year=$year&amp;month=$month&amp;day=$day&amp;id_classe=".$this->id_classe."&amp;type=".$this->type."\"";
 
 
    }
@@ -98,7 +99,7 @@ class Calendar
       {
          $show = $basetime + ($i * 24 * 60 * 60);
          $fl = strftime('%a',$show);
-         $s .= "<td align=center valign=top class=\"calendarHeader\">$fl</td>\n";
+         $s .= "<td align=\"center\" valign=\"top\" class=\"calendarHeader\">$fl</td>\n";
       }
       return $s;
     }
@@ -119,22 +120,22 @@ class Calendar
         $prevMonth = $this->getCalendarLink($this->month - 1 >   0 ? $this->month - 1 : 12, $this->month - 1 >   0 ? $this->year : $this->year - 1, $this->id_classe, $this->type);
         $nextMonth = $this->getCalendarLink($this->month + 1 <= 12 ? $this->month + 1 :  1, $this->month + 1 <= 12 ? $this->year : $this->year + 1, $this->id_classe, $this->type);
 
-        $s .= "<table class=\"calendar\" style=\"margin:auto\" border=\"1\" summary=\"Tableau calendrier\">\n";
-        $s .= "<tr><td class=\"calendarcol1\" align='right' valign='top'></td>\n";
-        $s .= "<td align='center' valign='top' class=\"calendarHeader\">" . (($prevMonth == "") ? "&nbsp;" : "<a href=\"$prevMonth\">&lt;&lt;</a>")  . "</td>\n";
-        $s .= "<td align='center' valign='top' class=\"calendarHeader\" colspan='5'>";
+        $s .= "<table class=\"calendar\" style=\"margin:auto; background-color: #FFFFFF;\" border=\"0\" cellpadding=\"1\" cellspacing=\"1\">\n";
+        $s .= "<tr><td class=\"calendarcol1\" align=\"right\" valign=\"top\"></td>\n";
+        $s .= "<td align=\"center\" valign=\"top\" class=\"calendarHeader\">" . (($prevMonth == "") ? "&nbsp;" : "<a href=\"$prevMonth\">&lt;&lt;</a>")  . "</td>\n";
+        $s .= "<td align=\"center\" valign=\"top\" class=\"calendarHeader\" colspan=\"5\">";
 
     if ($this->dmy!='gestion_absences') {
-        $s .= "<a href=\"month.php?year=$this->year&month=$this->month&day=1&id_classe=$this->id_classe&type=$this->type\">$monthName&nbsp;$this->year</a>";
+        $s .= "<a href=\"month.php?year=$this->year&month=$this->month&amp;day=1&amp;id_classe=$this->id_classe&amp;type=$this->type\">$monthName&amp;nbsp;$this->year</a>";
     } else {
         $s .= "$monthName&nbsp;$this->year";
     }
 
     $s .= "</td>\n";
-        $s .= "<td align=center valign=top class=\"calendarHeader\">" . (($nextMonth == "") ? "&nbsp;" : "<a href=\"$nextMonth\">&gt;&gt;</a>")  . "</td>\n";
+        $s .= "<td align=\"center\" valign=\"top\" class=\"calendarHeader\">" . (($nextMonth == "") ? "&nbsp;" : "<a href=\"$nextMonth\">&gt;&gt;</a>")  . "</td>\n";
         $s .= "</tr>\n";
 
-        $s .= "<tr><td  class=\"calendarcol1\" align=right valign=top></td>\n";
+        $s .= "<tr><td class=\"calendarcol1\" align=\"right\" valign=\"top\"></td>\n";
         $s .= $this->getFirstDays();
         $s .= "</tr>\n";
 
@@ -143,18 +144,23 @@ class Calendar
     $numweek=1;
         while ($d <= $daysInMonth)
         {
-        $s .= "<tr><td class=\"calendarcol1\" align=right valign=top>";
+        $s .= "<tr><td class=\"calendarcol1\" align=\"right\" valign=\"top\">";
         if ($this->dmy!='gestion_absences') {
-                $s .="<a href=\"week.php?year=$this->year&month=$this->month&day=$temp&id_classe=$this->id_classe&type=$this->type\">s".$numweek."</a>";
+                $s .="<a href=\"week.php?year=$this->year&amp;month=$this->month&amp;day=$temp&amp;id_classe=$this->id_classe&amp;type=$this->type\">s".$numweek."</a>";
             $temp=$temp+7;
         $numweek++;
             }
             $s .= "</td>\n";
             for ($i = 0; $i < 7; $i++)
             {
-                $s .= "<td class=\"calendar\" align=right valign=top>";
+		// gestion des couleurs des jours
+		$couleur = '#DFFFEC';
+		$couleur_vide = '#FFFFFF';
+		if ( $i == '6' ) { $couleur = '#6FFFA8'; }
+
                 if ($d > 0 && $d <= $daysInMonth)
                 {
+                   $s .= "<td style=\"background-color: ".$couleur.";\"class=\"calendar\" align=\"right\" valign=\"top\">";
                     $link = $this->getDateLink($d, $this->month, $this->year);
                     if ($link == "")
                         $s .= $d;
@@ -165,6 +171,7 @@ class Calendar
                 }
                 else
                 {
+                    $s .= "<td style=\"background-color: ".$couleur_vide.";\"class=\"calendar\" align=\"right\" valign=\"top\">";
                     $s .= "&nbsp;";
                 }
                 $s .= "</td>\n";
@@ -172,21 +179,14 @@ class Calendar
             }
             $s .= "</tr>\n";
         }
-
         $s .= "</table>\n";
-
         return $s;
     }
 }
 
 $thismonth = mktime(0, 0, 0, $month,   $day, $year);
 
-
-
-
 $cal = new Calendar(date("d",$thismonth), date("m",$thismonth), date("Y",$thismonth), 1, $id_classe, $type, $dmy);
 echo $cal->getHTML();
-
-}
-?>
+} ?>
 
