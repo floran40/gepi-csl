@@ -1,6 +1,6 @@
 <?php
 /**
- * Gestion des EDT ical
+ * Gestion des absences et remlacements de professeurs
  * 
  * $_POST['activer'] activation/désactivation
  * $_POST['is_posted']
@@ -33,7 +33,7 @@
  */
 
 $accessibilite="y";
-$titre_page = "Gestion module EDT ical";
+$titre_page = "Gestion module Absences/remplacements profs";
 $niveau_arbo = 1;
 $gepiPathJava="./..";
 
@@ -51,10 +51,10 @@ if ($resultat_session == 'c') {
 	die();
 }
 
-$sql="SELECT 1=1 FROM droits WHERE id='/edt/index_admin.php';";
+$sql="SELECT 1=1 FROM droits WHERE id='/mod_abs_prof/index_admin.php';";
 $test=mysqli_query($GLOBALS["mysqli"], $sql);
 if(mysqli_num_rows($test)==0) {
-$sql="INSERT INTO droits SET id='/edt/index_admin.php',
+$sql="INSERT INTO droits SET id='/mod_abs_prof/index_admin.php',
 administrateur='V',
 professeur='F',
 cpe='F',
@@ -63,7 +63,7 @@ eleve='F',
 responsable='F',
 secours='F',
 autre='F',
-description='EDT ICAL : Administration',
+description='Absences/remplacements de professeurs : Administration',
 statut='';";
 $insert=mysqli_query($GLOBALS["mysqli"], $sql);
 }
@@ -86,99 +86,130 @@ if((isset($_POST['is_posted']))&&($_POST['is_posted']==1)) {
 	check_token();
 
 	if (isset($_POST['activer'])) {
-		if (!saveSetting("active_edt_ical", $_POST['activer'])) $msg = "Erreur lors de l'enregistrement du paramètre activation/désactivation !";
+		if (!saveSetting("active_mod_abs_prof", $_POST['activer'])) $msg = "Erreur lors de l'enregistrement du paramètre activation/désactivation !";
 	}
 }
 
 if((isset($_POST['is_posted']))&&($_POST['is_posted']==2)) {
 	check_token();
 
-	if(isset($_POST['EdtIcalProf'])) {
-		if (!saveSetting("EdtIcalProf", "yes")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalProf !";
-		}
-	}
-	else {
-		if (!saveSetting("EdtIcalProf", "no")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalProf !";
-		}
-	}
+	$tab=array('AbsProfSaisieAbsScol','AbsProfProposerRemplacementScol','AbsProfAttribuerRemplacementScol','AbsProfSaisieAbsCpe','AbsProfProposerRemplacementCpe','AbsProfAttribuerRemplacementCpe', 'AbsProfGroupesClasseSeulement', 'AbsProfAutoriserProfPasApparaitre', 'AbsProfAfficherSurEDT2');
 
-	if(isset($_POST['EdtIcalProfTous'])) {
-		if (!saveSetting("EdtIcalProfTous", "yes")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalProfTous !";
+	for($loop=0;$loop<count($tab);$loop++) {
+		if(isset($_POST[$tab[$loop]])) {
+			if (!saveSetting($tab[$loop], "yes")) {
+				$msg = "Erreur lors de l'enregistrement du paramètre ".$tab[$loop]." !";
+			}
 		}
-	}
-	else {
-		if (!saveSetting("EdtIcalProfTous", "no")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalProfTous !";
-		}
-	}
-
-	if(isset($_POST['EdtIcalEleve'])) {
-		if (!saveSetting("EdtIcalEleve", "yes")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalEleve !";
-		}
-	}
-	else {
-		if (!saveSetting("EdtIcalEleve", "no")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalEleve !";
-		}
-	}
-
-	if(isset($_POST['EdtIcalResponsable'])) {
-		if (!saveSetting("EdtIcalResponsable", "yes")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalResponsable !";
-		}
-	}
-	else {
-		if (!saveSetting("EdtIcalResponsable", "no")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalResponsable !";
+		else {
+			if (!saveSetting($tab[$loop], "no")) {
+				$msg = "Erreur lors de l'enregistrement du paramètre ".$tab[$loop]." !";
+			}
 		}
 	}
 }
 
+
 if((isset($_POST['is_posted']))&&($_POST['is_posted']==3)) {
 	check_token();
 
-	if(isset($_POST['EdtIcalUploadScolarite'])) {
-		if (!saveSetting("EdtIcalUploadScolarite", "yes")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalUploadScolarite !";
-		}
-	}
-	else {
-		if (!saveSetting("EdtIcalUploadScolarite", "no")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalUploadScolarite !";
+	$login_user=isset($_POST['login_user']) ? $_POST['login_user'] : array();
+
+	$tab_user_mae=array();
+
+	$sql="SELECT value FROM abs_prof_divers WHERE name='login_exclus';";
+	$res_mae=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res_mae)>0) {
+		while($lig_mae=mysqli_fetch_object($res_mae)) {
+			$tab_user_mae[]=$lig_mae->value;
 		}
 	}
 
-	if(isset($_POST['EdtIcalUploadCpe'])) {
-		if (!saveSetting("EdtIcalUploadCpe", "yes")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalUploadCpe !";
+	$cpt_comptes_exclus_ajoutes=0;
+	for($loop=0;$loop<count($login_user);$loop++) {
+		if(!in_array($login_user[$loop], $tab_user_mae)) {
+			$sql="INSERT INTO abs_prof_divers SET name='login_exclus', value='".$login_user[$loop]."';";
+			$insert=mysqli_query($GLOBALS["mysqli"], $sql);
+			if($insert) {
+				$cpt_comptes_exclus_ajoutes++;
+			}
 		}
 	}
-	else {
-		if (!saveSetting("EdtIcalUploadCpe", "no")) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalUploadCpe !";
+	$msg="$cpt_comptes_exclus_ajoutes compte(s) exclu(s) des propositions de remplacements pris en compte.<br />";
+
+	$cpt_comptes_exclus_supprimes=0;
+	for($loop=0;$loop<count($tab_user_mae);$loop++) {
+		if(!in_array($tab_user_mae[$loop], $login_user)) {
+			$sql="DELETE FROM abs_prof_divers WHERE name='login_exclus' AND value='".$tab_user_mae[$loop]."';";
+			$delete=mysqli_query($GLOBALS["mysqli"], $sql);
+			if($delete) {
+				$cpt_comptes_exclus_supprimes++;
+			}
 		}
 	}
+
+	$msg.="$cpt_comptes_exclus_supprimes compte(s) précédemment exclu(s) des propositions de remplacements ne le sont plus.<br />";
 }
 
 if((isset($_POST['is_posted']))&&($_POST['is_posted']==4)) {
 	check_token();
 
-	if(isset($_POST['EdtIcalFormatNomProf'])) {
-		if (!saveSetting("EdtIcalFormatNomProf", $_POST['EdtIcalFormatNomProf'])) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalFormatNomProf !";
+	$matiere_exclue=isset($_POST['matiere_exclue']) ? $_POST['matiere_exclue'] : array();
+
+	$tab_mae=array();
+
+	$sql="SELECT value FROM abs_prof_divers WHERE name='matiere_exclue';";
+	$res_mae=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res_mae)>0) {
+		while($lig_mae=mysqli_fetch_object($res_mae)) {
+			$tab_mae[]=$lig_mae->value;
 		}
 	}
 
-	if(isset($_POST['EdtIcalFormatNomMatière'])) {
-		if (!saveSetting("EdtIcalFormatNomMatière", $_POST['EdtIcalFormatNomMatière'])) {
-			$msg = "Erreur lors de l'enregistrement du paramètre EdtIcalFormatNomMatière !";
+	$cpt_matieres_exclues_ajoutees=0;
+	for($loop=0;$loop<count($matiere_exclue);$loop++) {
+		if(!in_array($matiere_exclue[$loop], $tab_mae)) {
+			$sql="INSERT INTO abs_prof_divers SET name='matiere_exclue', value='".$matiere_exclue[$loop]."';";
+			$insert=mysqli_query($GLOBALS["mysqli"], $sql);
+			if($insert) {
+				$cpt_matieres_exclues_ajoutees++;
+			}
+		}
+	}
+	$msg="$cpt_matieres_exclues_ajoutees matière(s) exclue(s) des propositions de remplacements prises en compte.<br />";
+
+	$cpt_matieres_exclues_supprimees=0;
+	for($loop=0;$loop<count($tab_mae);$loop++) {
+		if(!in_array($tab_mae[$loop], $matiere_exclue)) {
+			$sql="DELETE FROM abs_prof_divers WHERE name='matiere_exclue' AND value='".$tab_mae[$loop]."';";
+			$delete=mysqli_query($GLOBALS["mysqli"], $sql);
+			if($delete) {
+				$cpt_matieres_exclues_supprimees++;
+			}
+		}
+	}
+
+	$msg.="$cpt_matieres_exclues_supprimees matière(s) précédemment exclue(s) des propositions de remplacements ne le sont plus.<br />";
+}
+
+if((isset($_POST['is_posted']))&&($_POST['is_posted']==5)) {
+	check_token();
+
+	$abs_prof_modele_message_eleve=isset($_POST['abs_prof_modele_message_eleve']) ? $_POST['abs_prof_modele_message_eleve'] : "";
+
+	if($abs_prof_modele_message_eleve=="") {
+		$msg="La chaine proposée ne peut pas être vide.<br />";
+	}
+	else {
+		if(!saveSetting('abs_prof_modele_message_eleve', $abs_prof_modele_message_eleve)) {
+			$msg="Erreur lors de l'enregistrement du modèle de message.<br />";
+		}
+		else {
+			$msg="Modèle de message enregistré.<br />";
 		}
 	}
 }
+
 
 if (isset($_POST['is_posted']) and ($msg=='')){
   $msg = "Les modifications ont été enregistrées !";
@@ -223,7 +254,7 @@ if ((!isset($_SESSION['rep_gabarits'])) || (empty($_SESSION['rep_gabarits']))) {
 // $affiche_debug=debug_var();
 
 
-$nom_gabarit = '../templates/'.$_SESSION['rep_gabarits'].'/edt/index_admin_template.php';
+$nom_gabarit = '../templates/'.$_SESSION['rep_gabarits'].'/mod_abs_prof/index_admin_template.php';
 
 $tbs_last_connection=""; // On n'affiche pas les dernières connexions
 /**

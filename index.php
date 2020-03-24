@@ -1,8 +1,8 @@
 <?php
 /*
- * $Id: index.php 7393 2011-07-05 17:58:38Z mleygnac $
+ * $Id$
  *
- * Copyright 2001, 2012 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun
+ * Copyright 2001, 2014 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun, Stephane Boireau
  *
  * This file is part of GEPI.
  *
@@ -21,16 +21,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-$action = isset($_POST["action"]) ? $_POST["action"] :(isset($_GET["action"]) ? $_GET["action"] :NULL);
-
-// On désamorce une tentative de contournement du traitement anti-injection lorsque register_globals=on
-if (isset($_GET['traite_anti_inject']) OR isset($_POST['traite_anti_inject'])) $traite_anti_inject = "yes";
-
-// Dans le cas ou on poste un message, pas de traitement anti_inject
-// Pour ne pas interférer avec fckeditor
-if ((isset($action)) and ($action == 'message') and (isset($_POST['message'])) and isset($_POST['ok']))
-	$traite_anti_inject = 'no';
-
 // Initialisations files
 require_once("../lib/initialisations.inc.php");
 // Resume session
@@ -45,1075 +35,853 @@ if ($resultat_session == 'c') {
 	die();
 }
 
+$sql="SELECT 1=1 FROM droits WHERE id='/mod_abs_prof/index.php';";
+$test=mysqli_query($GLOBALS["mysqli"], $sql);
+if(mysqli_num_rows($test)==0) {
+	$sql="INSERT INTO droits SET id='/mod_abs_prof/index.php',
+administrateur='V',
+professeur='V',
+cpe='V',
+scolarite='V',
+eleve='V',
+responsable='V',
+secours='F',
+autre='F',
+description='Absences et remplacements de professeurs',
+statut='';";
+	$insert=mysqli_query($GLOBALS["mysqli"], $sql);
+}
 if (!checkAccess()) {
 	header("Location: ../logout.php?auto=1");
 	die();
 }
 
-if(($_SESSION['statut']=='cpe')&&(!getSettingAOui('GepiAccesPanneauAffichageCpe'))) {
-	header("Location: ../accueil.php?msg=Acces non autorisé");
+if(!getSettingAOui('active_mod_abs_prof')) {
+	header("Location: ../accueil.php?msg=Module désactivé");
 	die();
 }
 
-//Configuration du calendrier
-/*
-include("../lib/calendrier/calendrier.class.php");
-$cal1 = new Calendrier("formulaire", "display_date_debut");
-$cal2 = new Calendrier("formulaire", "display_date_fin");
-$cal3 = new Calendrier("formulaire", "display_date_decompte");
-*/
-$style_specifique[] = "lib/DHTMLcalendar/calendarstyle";
-$javascript_specifique[] = "lib/DHTMLcalendar/calendar";
-$javascript_specifique[] = "lib/DHTMLcalendar/lang/calendar-fr";
-$javascript_specifique[] = "lib/DHTMLcalendar/calendar-setup";
-
-// initialisation de $id_mess
-$id_mess = isset($_POST["id_mess"]) ? $_POST["id_mess"] :(isset($_GET["id_mess"]) ? $_GET["id_mess"] :NULL);
-
-$order_by = isset($_POST["order_by"]) ? $_POST["order_by"] :(isset($_GET["order_by"]) ? $_GET["order_by"] :"date_debut");
-if ($order_by != "date_debut" and $order_by != "date_fin" and $order_by != "id") {
-	$order_by = "date_debut";
+$test_champ=mysqli_num_rows(mysqli_query($mysqli, "SHOW COLUMNS FROM abs_prof_remplacement LIKE 'id_aid';"));
+if ($test_champ==0) {
+	$query = mysqli_query($mysqli, "ALTER TABLE abs_prof_remplacement ADD id_aid INT(11) NOT NULL AFTER id_groupe;");
 }
 
-/*
-function formate_date_decompte($date_decompte) {
-	//$tmp_date=getdate($date_decompte);
-	return strftime("%d/%m/%Y à %H:%M",$date_decompte);
-}
-*/
+$mode=isset($_POST['mode']) ? $_POST['mode'] : (isset($_GET['mode']) ? $_GET['mode'] : NULL);
 
-/*
-function ajout_bouton_supprimer_message($contenu_cor,$id_message)
-	{
-	global $gepiPath;
-	$contenu_cor='
-	<form method="POST" action="accueil.php" name="f_suppression_message">
-	<input type="hidden" name="csrf_alea" value="_CSRF_ALEA_">
-	<input type="hidden" name="supprimer_message" value="'.$id_message.'">
-	<button type="submit" title=" Supprimer ce message " style="border: none; background: none; float: right;"><img style="vertical-align: bottom;" src="'.$gepiPath.'/images/icons/delete.png"></button>
-	</form>'.$contenu_cor;
-	$r_sql="UPDATE messages SET texte='".$contenu_cor."' WHERE id='".$id_message."'";
-	return mysqli_query($GLOBALS["mysqli"], $r_sql)?true:false;
-	}
-
-//function update_message($contenu_cor,$date_debut,$date_fin,$date_decompte,$statuts_destinataires,$login_destinataire,$matiere_destinataire)
-function update_message($contenu_cor,$date_debut,$date_fin,$date_decompte,$statuts_destinataires,$login_destinataire)
-	{
-	$r_sql = "UPDATE messages
-	SET texte = '".$contenu_cor."',
-	date_debut = '".$date_debut."',
-	date_fin = '".$date_fin."',
-	date_decompte = '".$date_decompte."',
-	auteur='".$_SESSION['login']."',
-	statuts_destinataires = '".$statuts_destinataires."',
-	login_destinataire='".$login_destinataire."'
-	WHERE id ='".$_POST['id_mess']."'";
-	//", matiere_destinataire='".$matiere_destinataire."'";
-	return mysqli_query($GLOBALS["mysqli"], $r_sql)?true:false;
-	}
-
-//function set_message($contenu_cor,$date_debut,$date_fin,$date_decompte,$statuts_destinataires,$login_destinataire,$matiere_destinataire)
-function set_message($contenu_cor,$date_debut,$date_fin,$date_decompte,$statuts_destinataires,$login_destinataire)
-	{
-	$r_sql = "INSERT INTO messages
-	SET texte = '".$contenu_cor."',
-	date_debut = '".$date_debut."',
-	date_fin = '".$date_fin."',
-	date_decompte = '".$date_decompte."',
-	auteur='".$_SESSION['login']."',
-	statuts_destinataires = '".$statuts_destinataires."',
-	login_destinataire='".$login_destinataire."'";
-	//$r_sql.=", matiere_destinataire='".$matiere_destinataire."'";
-	$retour=mysqli_query($GLOBALS["mysqli"], $r_sql)?true:false;
-	if ($retour)
-		{
-		$id_message=((is_null($___mysqli_res = mysqli_insert_id($GLOBALS["mysqli"]))) ? false : $___mysqli_res);
-		if (isset($_POST['suppression_possible']) && $_POST['suppression_possible']=="oui" &&  $statuts_destinataires=="_")
-			$retour=ajout_bouton_supprimer_message($contenu_cor,$id_message);
-		}
-	return $retour;
-	}
-*/
-
-// initialisation des notifications
-$msg_erreur=""; $msg_OK="";
-
-//
-// Purge des messages
-//
-if (isset($_POST['purger']))
-	{
+if((isset($mode))&&($mode=="suppr_abs")&&(isset($_POST['suppr_abs']))) {
 	check_token();
-	//$r_sql="DELETE FROM messages WHERE date_fin+86400 <= ".mktime(0,0,0,date("m"),date("d"),date("Y"));
-	$r_sql="DELETE FROM messages WHERE date_fin+86400 <= ".time();
-	if (!mysqli_query($GLOBALS["mysqli"], $r_sql)) $msg_erreur="Erreur lors de la purge des messages&nbsp;: ".mysqli_error($GLOBALS["mysqli"]);
-	else	{
-			$msg_OK="Purge effectuée. ";
-			if (mysqli_affected_rows($GLOBALS["mysqli"])==0) $msg_OK.="Aucun message supprimé.";
-				else $msg_OK.="Nombre de message(s) supprimé(s)&nbsp;: ".mysqli_affected_rows($GLOBALS["mysqli"]);
+
+	$msg="";
+	$suppr_abs=$_POST['suppr_abs'];
+
+	$nb_suppr=0;
+	for($loop=0;$loop<count($suppr_abs);$loop++) {
+		// A FAIRE : Commencer par sélectionner les remplacements validés ou acceptés pour avertir par mail et/ou en page d'accueil l'utilisateur.
+
+		$sql="DELETE FROM abs_prof_remplacement WHERE id_absence='".$suppr_abs[$loop]."';";
+		$del=mysqli_query($GLOBALS["mysqli"], $sql);
+		if(!$del) {
+			$msg.="Erreur lors de la suppression des propositions de remplacements associées à l'absence n°".$suppr_abs[$loop].".<br />";
+		}
+		else {
+			$sql="DELETE FROM abs_prof WHERE id='".$suppr_abs[$loop]."';";
+			$del=mysqli_query($GLOBALS["mysqli"], $sql);
+			if(!$del) {
+				$msg.="Erreur lors de la suppression de l'absence n°".$suppr_abs[$loop].".<br />";
 			}
+			else {
+				$nb_suppr++;
+			}
+		}
 	}
 
-//
-// Suppression d'un message
-//
-if ((isset($action)) and ($action == 'sup_entry')) {
-	check_token();
-	$res = sql_query("delete from messages where id = '".$_GET['id_del']."'");
-	if ($res) $msg_OK = "Suppression réussie";
+	$msg.=$nb_suppr." absence(s) supprimée(s).<br />";
 }
 
-//
-// Annulation des modifs
-//
-if ((isset($action)) and ($action == 'message') and (isset($_POST['cancel']))) {
-	unset ($id_mess); $contenu='';
-}
+if($_SESSION['statut']=='professeur') {
+	//if((isset($_POST['is_posted']))&&($_POST['is_posted']==1)) {
+	if(isset($_POST['is_posted'])) {
+		check_token();
 
+		$msg="";
 
-//
-// Insertion ou modification d'un message
-//
-if ((isset($action)) and ($action == 'message') and (isset($_POST['message'])) and isset($_POST['ok'])) {
-	check_token();
-	$record = 'yes';
-	$contenu_cor = traitement_magic_quotes(corriger_caracteres($_POST['message']));
-	//$contenu_cor = html_entity_decode($_POST['message']);
+		$reponse_proposition=isset($_POST['reponse_proposition']) ? $_POST['reponse_proposition'] : array();
+		$commentaire_proposition=isset($_POST['commentaire_proposition']) ? $_POST['commentaire_proposition'] : array();
 
-	$statuts_destinataires = '_'; $t_statuts_destinataires=array();
-	if (isset($_POST['desti_s'])) {$statuts_destinataires .= 's'; $t_statuts_destinataires[]='scolarite'; };
-	if (isset($_POST['desti_p'])) {$statuts_destinataires .= 'p'; $t_statuts_destinataires[]='professeur'; };
-	if (isset($_POST['desti_c'])) {$statuts_destinataires .= 'c'; $t_statuts_destinataires[]='cpe'; };
-	if (isset($_POST['desti_a'])) {$statuts_destinataires .= 'a'; $t_statuts_destinataires[]='administrateur'; };
-	if (isset($_POST['desti_r'])) {$statuts_destinataires .= 'r'; $t_statuts_destinataires[]='responsable'; };
-	if (isset($_POST['desti_e'])) {$statuts_destinataires .= 'e'; $t_statuts_destinataires[]='eleve'; };
-
-	$engagement_ele=isset($_POST['engagement_ele']) ? $_POST['engagement_ele'] : array();
-	$engagement_resp=isset($_POST['engagement_resp']) ? $_POST['engagement_resp'] : array();
-
-	if ($statuts_destinataires=="_" && $_POST['id_classe']=="" && $_POST['login_destinataire']=="" && $_POST['matiere_destinataire']=="" && $_POST['eleves_id_classe']=="" && $_POST['parents_id_classe']=="" && (!isset($_POST['engagement_ele'])) && (!isset($_POST['engagement_resp'])) && (!isset($_POST['prof_suivi']))) {
-		$msg_erreur = "ATTENTION : aucun destinataire saisi.<br />(message non enregitré)";
-		$record = 'no';
-	}
-
-	if ($contenu_cor == '') {
-		$msg_erreur = "ATTENTION : aucun texte saisi.<br />(message non enregitré)";
-		$record = 'no';
-	}
-
-	if (preg_match("#([0-9]{2})/([0-9]{2})/([0-9]{4})#", $_POST['display_date_debut'])) {
-		$anneed = mb_substr($_POST['display_date_debut'],6,4);
-		$moisd = mb_substr($_POST['display_date_debut'],3,2);
-		$jourd = mb_substr($_POST['display_date_debut'],0,2);
-		while ((!checkdate($moisd, $jourd, $anneed)) and ($jourd > 0)) $jourd--;
-		$date_debut=mktime(0,0,0,$moisd,$jourd,$anneed);
-	} else {
-		$msg_erreur = "ATTENTION : La date de début d'affichage n'est pas valide.<br />(message non enregitré)";
-		$record = 'no';
-	}
-
-	if (preg_match("#([0-9]{2})/([0-9]{2})/([0-9]{4})#", $_POST['display_date_fin'])) {
-		$anneef = mb_substr($_POST['display_date_fin'],6,4);
-		$moisf = mb_substr($_POST['display_date_fin'],3,2);
-		$jourf = mb_substr($_POST['display_date_fin'],0,2);
-		while ((!checkdate($moisf, $jourf, $anneef)) and ($jourf > 0)) $jourf--;
-		$date_fin=mktime(23,59,0,$moisf,$jourf,$anneef);
-	} else {
-		$msg_erreur = "ATTENTION : La date de fin d'affichage n'est pas valide.<br />(message non enregitré)";
-		$record = 'no';
-	}
-
-	if ($record == 'yes') {
-		if (preg_match("#([0-9]{2})/([0-9]{2})/([0-9]{4})#", $_POST['display_date_decompte'])) {
-			$anneed = mb_substr($_POST['display_date_decompte'],6,4);
-			$moisd = mb_substr($_POST['display_date_decompte'],3,2);
-			$jourd = mb_substr($_POST['display_date_decompte'],0,2);
-			//echo "$jourd/$moisd/$anneed<br />";
-			while ((!checkdate($moisd, $jourd, $anneed)) and ($jourd > 0)) {
-				$jourd--;
-				//echo "$jourd/$moisd/$anneed<br />";
+		$nb_update=0;
+		foreach($reponse_proposition as $key => $value) {
+			$sql="SELECT * FROM abs_prof_remplacement WHERE id='$key' AND login_user='".$_SESSION['login']."' AND date_fin_r>='".strftime('%Y-%m-%d %H:%M:%S')."';";
+			$test=mysqli_query($GLOBALS["mysqli"], $sql);
+			if(mysqli_num_rows($test)==0) {
+				$msg.="La proposition de remplacement n°$key ne vous est pas attribuée ou la date du remplacement est passée.<br />";
 			}
-			$date_decompte=mktime(0,0,0,$moisd,$jourd,$anneed);
-			//echo strftime("%d/%m/%Y à %H:%M",$date_decompte)."<br />";
-
-			if (preg_match("/([0-9]{1,2}):([0-9]{0,2})/", str_ireplace('h',':',$_POST['display_heure_decompte']))) {
-				$heured = mb_substr($_POST['display_heure_decompte'],0,2);
-				$minuted = mb_substr($_POST['display_heure_decompte'],3,2);
-				$date_decompte=$date_decompte+$heured*3600+$minuted*60;
-				//echo strftime("%d/%m/%Y à %H:%M",$date_decompte)."<br />";
-			} else {
-				$msg_erreur = "ATTENTION : L'heure de décompte n'est pas valide.<br />(message non enregitré)";
-				$record = 'no';
-			}
-		} else {
-			$msg_erreur = "ATTENTION : La date de décompte n'est pas valide.<br />(message non enregitré)";
-			$record = 'no';
-		}
-	}
-
-	// par sécurité les rédacteurs d'un message ne peuvent y insérer la variable _CSRF_ALEA_
-	$pos_crsf_alea=strpos($contenu_cor,"_CSRF_ALEA_");
-	if($pos_crsf_alea!==false)
-		{
-		$contenu_cor=preg_replace("/_CSRF_ALEA_/","",$contenu_cor);
-		$msg_erreur = "Contenu interdit.";
-		$record = 'no';
-		}
-
-	// tableau des utilisateurs destinataires
-	$login_destinataire="";
-	//$matiere_destinataire="";
-	$t_login_destinataires=array();
-		// un destinataire
-		if ($_POST['login_destinataire']<>"") 
-			{$t_login_destinataires[]=$_POST['login_destinataire'];$login_destinataire=$_POST['login_destinataire'];}
-
-		// les professeurs d'une classe
-		if ($_POST['id_classe']<>"")
-			{
-			$id_classe=$_POST['id_classe'];
-			$r_sql="SELECT DISTINCT utilisateurs.login FROM j_groupes_classes,groupes,j_groupes_professeurs,utilisateurs WHERE j_groupes_classes.id_classe='".$id_classe."' AND j_groupes_classes.id_groupe=groupes.id AND groupes.id=j_groupes_professeurs.id_groupe AND j_groupes_professeurs.login=utilisateurs.login";
-			$R_professeurs=mysqli_query($GLOBALS["mysqli"], $r_sql);
-			while ($un_professeur=mysqli_fetch_assoc($R_professeurs))
-				if(!in_array($un_professeur['login'], $t_login_destinataires)) {
-					$t_login_destinataires[]=$un_professeur['login'];
+			else {
+				if(check_proposition_remplacement_validee2($key)==$_SESSION['login']) {
+					// On ne devrait pas arriver là sauf saisies quasi-simultanées côté admin et prof
+					$msg.="La proposition de remplacement n°$key a été validée par l'Administration.<br />Le remplacement vous est attribué.<br />S'il faut revenir sur ce choix, il est indispensable de le faire oralement en prenant langue avec l'Administration.<br />";
 				}
-			}
+				else {
+					$detail_sql="";
+					$lig=mysqli_fetch_object($test);
+					if($reponse_proposition[$key]!=$lig->reponse) {
+						$detail_sql.="reponse='".$reponse_proposition[$key]."', date_reponse='".strftime('%Y-%m-%d %H:%M:%S')."'";
+					}
 
-		// les professeurs d'une matière
-		if ($_POST['matiere_destinataire']<>"")
-			{
-			$matiere_destinataire=$_POST['matiere_destinataire'];
-			$r_sql="SELECT DISTINCT u.login FROM j_groupes_matieres jgm, j_groupes_professeurs jgp, utilisateurs u WHERE jgm.id_groupe=jgp.id_groupe AND jgp.login=u.login AND jgm.id_matiere='".$matiere_destinataire."';";
-			//echo "$r_sql<br />";
-			$R_professeurs=mysqli_query($GLOBALS["mysqli"], $r_sql);
-			while ($un_professeur=mysqli_fetch_assoc($R_professeurs))
-				if(!in_array($un_professeur['login'], $t_login_destinataires)) {
-					$t_login_destinataires[]=$un_professeur['login'];
-				}
-			}
+					// Pas sûr que le test fonctionne bien avec les antislashes, retours à la ligne,...
+					//if($commentaire_proposition[$key]!=$lig->commentaire_prof) {
+					if(stripslashes(preg_replace('/(\\\n)/',"\n",$commentaire_proposition[$key]))!=$lig->commentaire_prof) {
+						if($detail_sql!="") {
+							$detail_sql.=", ";
+						}
+						$detail_sql.="commentaire_prof='".$commentaire_proposition[$key]."'";
+					}
 
-		// les élèves d'une classe
-		if ($_POST['eleves_id_classe']<>"")
-			{
-			$eleves_id_classe=$_POST['eleves_id_classe'];
-			$r_sql="SELECT DISTINCT u.login FROM j_eleves_classes jec, 
-									utilisateurs u 
-								WHERE jec.id_classe='".$eleves_id_classe."' AND 
-								jec.login=u.login";
-			$R_eleves=mysqli_query($GLOBALS["mysqli"], $r_sql);
-			while ($un_eleve=mysqli_fetch_assoc($R_eleves))
-				if(!in_array($un_eleve['login'], $t_login_destinataires)) {
-					$t_login_destinataires[]=$un_eleve['login'];
-				}
-			}
-
-		// les responsables élèves d'une classe
-		if ($_POST['parents_id_classe']<>"")
-			{
-			$parents_id_classe=$_POST['parents_id_classe'];
-			$r_sql="SELECT DISTINCT u.login FROM j_eleves_classes jec, 
-									eleves e,
-									responsables2 r,
-									resp_pers rp,
-									utilisateurs u 
-								WHERE jec.id_classe='".$parents_id_classe."' AND 
-								jec.login=e.login AND
-								e.ele_id=r.ele_id AND
-								r.pers_id=rp.pers_id AND
-								rp.login=u.login";
-			$R_parents=mysqli_query($GLOBALS["mysqli"], $r_sql);
-			while ($un_parent=mysqli_fetch_assoc($R_parents))
-				if(!in_array($un_parent['login'], $t_login_destinataires)) {
-					$t_login_destinataires[]=$un_parent['login'];
-				}
-			}
-
-		// Les PP
-		if (isset($_POST['prof_suivi'])) {
-			$r_sql="SELECT DISTINCT professeur FROM j_eleves_professeurs;";
-			$R_pp=mysqli_query($GLOBALS["mysqli"], $r_sql);
-			while ($un_pp=mysqli_fetch_assoc($R_pp)) {
-				if(!in_array($un_pp['professeur'], $t_login_destinataires)) {
-					$t_login_destinataires[]=$un_pp['professeur'];
-				}
-			}
-		}
-
-		// Engagements élèves
-		if (count($engagement_ele)>0) {
-			for($loop=0;$loop<count($engagement_ele);$loop++) {
-				$tab_user_eng=get_tab_login_tel_engagement($engagement_ele[$loop]);
-				for($loop2=0;$loop2<count($tab_user_eng);$loop2++) {
-					if(!in_array($tab_user_eng[$loop2], $t_login_destinataires)) {
-						$t_login_destinataires[]=$tab_user_eng[$loop2];
+					if($detail_sql!="") {
+						$sql="UPDATE abs_prof_remplacement SET $detail_sql WHERE id='$key';";
+						//echo "$sql<br />";
+						$update=mysqli_query($GLOBALS["mysqli"], $sql);
+						if(!$update) {
+							$msg.="Erreur lors de l'enregistrement de la réponse ou du commentaire pour la proposition n°$key<br />";
+						}
+						else {
+							$nb_update++;
+						}
 					}
 				}
 			}
 		}
 
-		// Engagements responsables
-		if (count($engagement_resp)>0) {
-			for($loop=0;$loop<count($engagement_resp);$loop++) {
-				$tab_user_eng=get_tab_login_tel_engagement($engagement_resp[$loop]);
-				for($loop2=0;$loop2<count($tab_user_eng);$loop2++) {
-					if(!in_array($tab_user_eng[$loop2], $t_login_destinataires)) {
-						$t_login_destinataires[]=$tab_user_eng[$loop2];
-					}
-				}
-			}
-		}
-
-	// on enregistre le message
-	if ($record == 'yes') {
-		$erreur=false;
-
-		/*
-		echo "\$date_debut=$date_debut<br />";
-		echo "\$date_fin=$date_fin<br />";
-		echo "\$date_decompte=$date_decompte<br />";
-		*/
-
-		if (count($t_login_destinataires)==0)
-			if (isset($_POST['id_mess']))
-				$erreur=!update_message($contenu_cor,$date_debut,$date_fin,$date_decompte,$statuts_destinataires,"");
-			else
-				$erreur=!set_message($contenu_cor,$date_debut,$date_fin,$date_decompte,$statuts_destinataires,"");
-		else
-			{
-			// pour éviter qu'un utilisateur de statut donné voit n fois le message adressé aux profs d'une classe 
-			if (count($t_login_destinataires)>1) $statuts_destinataires="_";
-			foreach($t_login_destinataires as $login_destinataire)
-				if (isset($_POST['id_mess']))
-					$erreur=!update_message($contenu_cor,$date_debut,$date_fin,$date_decompte,$statuts_destinataires,$login_destinataire) && $erreur;
-				else
-					$erreur=!set_message($contenu_cor,$date_debut,$date_fin,$date_decompte,$statuts_destinataires,$login_destinataire) && $erreur;
-			}
-
-	// Envoi de sms
-	if (getSettingAOui('autorise_envoi_sms') && isset($_POST['envoi_sms']) && $_POST['envoi_sms']=='oui') {
-		require_once("../lib/envoi_SMS.inc.php");
-		
-		/* code inutile pour l'instant, seuls les responsables et les éléves ont un tél. portable dans la base
-		if ($statuts_destinataires<>"_") {
-			// on complète le tableau des logins des destinataires
-			// avec les logins des utilisateurs dont le statut est destinataire sauf 'responsable' et 'eleve'
-			$liste_statuts=''; // liste des statuts destinataires sauf 'responsable' et 'eleve'
-			foreach($t_statuts_destinataires as $statut) {
-				if ($liste_statuts<>'') $liste_statuts.=', ';
-				if ($statut<>'responsable' || $statut<>'eleve') $liste_statuts.="'".$statut."'";
-				}
-			if ($liste_statuts<>'') {
-				$liste_statuts='('.$liste_statuts.')';
-				$r_sql='SELECT `login` FROM `utilisateurs` WHERE `statut` IN '.$liste_statuts;
-				$R_logins=mysqli_query($GLOBALS["mysqli"], $r_sql);
-				while ($un_login=mysqli_fetch_assoc($R_logins)) $t_login_destinataires[]=$un_login['login'];
-				$t_login_destinataires=array_unique($t_login_destinataires);
-				}
-		}
-		*/
-		// On constitue la liste des numéros de portable destinataires du sms
-		$t_numeros=array();
-		$liste_logins_destinataires='';
-		$t_login_destinataires=array_unique($t_login_destinataires);
-		foreach($t_login_destinataires as $login) {
-			if ($liste_logins_destinataires<>'') $liste_logins_destinataires.=', ';
-			$liste_logins_destinataires.="'".$login."'";
-			}
-		if ($liste_logins_destinataires<>'') {
-			$liste_logins_destinataires='('.$liste_logins_destinataires.')';
-			// les numéros de portable des responsables
-			$r_sql='SELECT `tel_port` FROM `resp_pers` WHERE `login` IN '.$liste_logins_destinataires;
-			$R_tel_ports=mysqli_query($GLOBALS["mysqli"], $r_sql);
-			while ($un_tel_port=mysqli_fetch_assoc($R_tel_ports)) if ($un_tel_port['tel_port']<>'') $t_numeros[]=$un_tel_port['tel_port'];
-			// les numéros de portable des élèves
-			$r_sql='SELECT `tel_port` FROM `eleves` WHERE `login` IN '.$liste_logins_destinataires;
-			$R_tel_ports=mysqli_query($GLOBALS["mysqli"], $r_sql);
-			while ($un_tel_port=mysqli_fetch_assoc($R_tel_ports)) if ($un_tel_port['tel_port']<>'') $t_numeros[]=$un_tel_port['tel_port'];
-			}
-		$t_numeros=array_unique($t_numeros);
-		
-		$sms=strip_tags($_POST['message']);
-		// suppression des tabulations
-		$sms=preg_replace('/\t/','',$sms);
-		// suppression des \n\n
-		while(strpos($sms,"\n\n")!==false) {$sms=preg_replace('/\n\n/',"\n",$sms);};
-
-		// envoi des SMS
-		envoi_SMS($t_numeros,$sms);
-	}
-
-
-		if (!$erreur) {
-			$msg_OK = "Le message a été enregistré.";
-			unset($contenu_cor);
-			unset($_POST['display_date_debut']);
-			unset($_POST['display_date_fin']);
-			unset($_POST['display_date_decompte']);
-			unset($id_mess);
-			unset($statuts_destinataires);
-			unset($login_destinataire);
-			//unset($matiere_destinataire);
-			unset($id_classe);
-			unset($eleves_id_classe);
-			unset($parents_id_classe);
-		} else {
-			$msg_erreur = "Erreur lors de l'enregistrement du message&nbsp;: <br  />".mysqli_error($GLOBALS["mysqli"]);
+		if($nb_update>0) {
+			$msg.="$nb_update réponse(s) ou commentaire(s) saisis.<br />";
 		}
 	}
- 
 }
 
+//$javascript_specifique[] = "lib/tablekit";
+//$utilisation_tablekit="ok";
+
+$avec_js_et_css_edt="y";
 
 $themessage  = 'Des informations ont été modifiées. Voulez-vous vraiment quitter sans enregistrer ?';
+// onclick=\"return confirm_abandon (this, change, '$themessage')\"
 $message_suppression = "Confirmation de suppression";
 //**************** EN-TETE *****************
-$titre_page = "Gestion des messages";
+$titre_page = "Absences prof";
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *************
 
 //debug_var();
 
-?>
-<script src="../ckeditor_4/ckeditor.js"></script>
-<?php
-
-//onclick=\"return confirm_abandon (this, change, '$themessage')\"
-echo "<a name=\"debut_de_page\"></a>";
-
-//debug_var();
-echo "<div style='color: #FF0000; text-align: center; padding: 0.5%;'>";
-if ($msg_erreur!="") echo "<p style='color: #FF0000; font-variant: small-caps;'>".$msg_erreur."</p>";
-if ($msg_OK!="") echo "<p style='color: #0000FF; font-variant: small-caps;'>".$msg_OK."</p>";
-echo "</div>";
-
-
-echo "<script type=\"text/javascript\" language=\"JavaScript\" SRC=\"../lib/clock_fr.js\"></SCRIPT>\n";
-//-----------------------------------------------------------------------------------
-echo "<p class='bold'><a href='../accueil.php' onclick=\"return confirm_abandon (this, change, '$themessage')\"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a> | <a href='".$_SERVER['PHP_SELF']."' onclick=\"return confirm_abandon (this, change, '$themessage')\">Nouveau message</a>";
-if(acces("/classes/dates_classes.php", $_SESSION['statut'])) {
-	echo " | <a href='../classes/dates_classes.php' onclick=\"return confirm_abandon (this, change, '$themessage')\">Nouvel événement classe</a>";
-}
-"</p>\n";
-echo "<table width=\"98%\" cellspacing=0 align=\"center\">\n";
-echo "<tr>\n";
-echo "<td valign='top'>\n";
-echo "<p>Nous sommes le&nbsp;:&nbsp;\n";
-echo "<script type=\"text/javascript\" language=\"javascript\">\n";
-echo "<!--\n";
-echo "new LiveClock();\n";
-echo "//-->\n";
-echo "</SCRIPT></p>\n";
-echo "</td>\n";
-
-echo "</tr></table><hr />\n";
-
-echo "<table  border = \"0\" cellpadding=\"10\">\n";
-echo "<tr>";
-echo "<td width = \"350px\" valign=\"top\">\n";
-
-echo "<span class='grand'>Purge des messages</span><br />\n";
-echo "<p>La purge des messages consiste à supprimer tous les messages dont la date de fin d'affichage est antérieure de plus de 24 h. à la date actuelle.</p>";
-echo "<form align=\"center\" action=\"./index.php\" method=\"post\" style=\"width: 100%;\">\n";
-echo add_token_field();
-echo "<p align=\"center\"><input type=\"submit\" name=\"purger\" value=\" Purger les messages \"></p>";
-echo "</form>";
-echo "<br /><br />";
-//
-// Affichage des messages éditables
-//
-
-$appel_messages = mysqli_query($GLOBALS["mysqli"], "SELECT * FROM messages WHERE texte <> '' AND statuts_destinataires <> '_'  AND login_destinataire='' order by ".$order_by." DESC");
-$nb_messages = mysqli_num_rows($appel_messages);
-
-if ($nb_messages>0) {
-	echo "<span class='grand' title=\"Seuls les messages destinés à tel ou tel statut peuvent être modifiés.
-Les messages destinés à une classe, une matière ou un individu ne peuvent pas être modifiés après coup.\">Messages pouvant être modifiés&nbsp;:</span><br />\n";
-	echo "<span class='small'>Classer par : ";
-	echo "<a href='index.php?order_by=date_debut' onclick=\"return confirm_abandon (this, change, '$themessage')\">date début</a> | <a href='index.php?order_by=date_fin' onclick=\"return confirm_abandon (this, change, '$themessage')\">date fin</a> | <a href='index.php?order_by=id' onclick=\"return confirm_abandon (this, change, '$themessage')\">date création</a>\n";
-	echo "</span><br /><br />\n";
-	$ind = 0;
-	while ($ind < $nb_messages) {
-	  $content = old_mysql_result($appel_messages, $ind, 'texte');
-	  // Mise en forme du texte
-	  $date_debut1 = old_mysql_result($appel_messages, $ind, 'date_debut');
-	  $date_fin1 = old_mysql_result($appel_messages, $ind, 'date_fin');
-	  $date_decompte1 = old_mysql_result($appel_messages, $ind, 'date_decompte');
-	  $auteur1 = old_mysql_result($appel_messages, $ind, 'auteur');
-	  $statuts_destinataires1 = old_mysql_result($appel_messages, $ind, 'statuts_destinataires');
-	  $login_destinataire1=old_mysql_result($appel_messages, $ind, 'login_destinataire');
-	  //$matiere_destinataire1=old_mysql_result($appel_messages, $ind, 'matiere_destinataire');
-	//  $nom_auteur = sql_query1("SELECT nom from utilisateurs where login = '".$auteur1."'");
-	//  $prenom_auteur = sql_query1("SELECT prenom from utilisateurs where login = '".$auteur1."'");
-
-
-	  $id_message =  old_mysql_result($appel_messages, $ind, 'id');
-
-
-	//  echo "<b><i>Message de </i></b>: ".$prenom_auteur." ".$nom_auteur.";
-		echo "<b><i>Affichage </i></b>: du <b>".strftime("%a %d %b %Y", $date_debut1)."</b> au <b>".strftime("%a %d %b %Y", $date_fin1)."</b>\n";
-		if(strstr($content,'_DECOMPTE_')) {
-		//echo "<br />Avec décompte des jours jusqu'au ".formate_date_decompte($date_decompte1);
-		echo "<br />Avec décompte des jours jusqu'au ".strftime("%d/%m/%Y à %H:%M",$date_decompte1);
-		}
-		echo "<br /><b><i>Statut(s) destinataire(s) </i></b> : ";
-		/*
-		if (strpos($statuts_destinataires1, "p")) echo "professeurs - ";
-		if (strpos($statuts_destinataires1, "c")) echo "c.p.e. - ";
-		if (strpos($statuts_destinataires1, "s")) echo "scolarité - ";
-		if (strpos($statuts_destinataires1, "a")) echo "administrateurs - ";
-		if (strpos($statuts_destinataires1, "e")) echo "élèves - ";
-		*/
-		$chaine_statuts_destinataires="";
-		if (strpos($statuts_destinataires1, "p")) {
-			$chaine_statuts_destinataires.="professeurs";
-		}
-		if (strpos($statuts_destinataires1, "c")){
-			if($chaine_statuts_destinataires!="") {$chaine_statuts_destinataires.=" - ";}
-			$chaine_statuts_destinataires.="c.p.e.";
-		}
-		if (strpos($statuts_destinataires1, "s")) {
-			if($chaine_statuts_destinataires!="") {$chaine_statuts_destinataires.=" - ";}
-			$chaine_statuts_destinataires.="scolarité";
-		}
-		if (strpos($statuts_destinataires1, "a")) {
-			if($chaine_statuts_destinataires!="") {$chaine_statuts_destinataires.=" - ";}
-			$chaine_statuts_destinataires.="administrateurs";
-		}
-		if (strpos($statuts_destinataires1, "e")) {
-			if($chaine_statuts_destinataires!="") {$chaine_statuts_destinataires.=" - ";}
-			$chaine_statuts_destinataires.="élèves";
-		}
-		if (strpos($statuts_destinataires1, "r")) {
-			if($chaine_statuts_destinataires!="") {$chaine_statuts_destinataires.=" - ";}
-			$chaine_statuts_destinataires.="responsables";
-		}
-		echo $chaine_statuts_destinataires;
-
-		// Pour forcer le target='_blank' sur ces messages en page d'accueil
-		$content=preg_replace("/<a href/i","<a target='_blank' href",$content);
-
-		//echo "<br /><b><i>Login du destinataire </i></b> : ".$login_destinataire1;
-		echo "<br /><a href='index.php?id_mess=$id_message' onclick=\"return confirm_abandon (this, change, '$themessage')\">modifier</a>
-		- <a href='index.php?id_del=$id_message&action=sup_entry".add_token_in_url()."' onclick=\"return confirmlink(this, 'Etes-vous sûr de vouloir supprimer ce message ?', '".$message_suppression."')\">supprimer</a>
-		<table border=0 width = '100%' cellpadding='5'><tr><td style=\"border:1px solid black\">".$content."</td></tr></table><br />\n";
-		$ind++;
-	}
-}
-
-// Fin de la colonne de gauche
-echo "</td>\n";
-
-
-// Début de la colonne de droite
-echo "<td valign=\"top\">\n";
-
-//
-// Affichage du message en modification
-//
-if (isset($id_mess)) {
-	$titre_mess = "Modification d'un message";
-	$appel_message = mysqli_query($GLOBALS["mysqli"], "SELECT  id, texte, date_debut, date_fin, date_decompte, auteur, statuts_destinataires, login_destinataire  FROM messages
-	WHERE (id = '".$id_mess."')");
-	$contenu = old_mysql_result($appel_message, 0, 'texte');
-	$date_debut = old_mysql_result($appel_message, 0, 'date_debut');
-	$date_fin = old_mysql_result($appel_message, 0, 'date_fin');
-	$date_decompte = old_mysql_result($appel_message, 0, 'date_decompte');
-	$statuts_destinataires = old_mysql_result($appel_message, 0, 'statuts_destinataires');
-	$login_destinataire=old_mysql_result($appel_message, 0, 'login_destinataire');
-	//$matiere_destinataire=old_mysql_result($appel_message, 0, 'matiere_destinataire');
-	$display_date_debut = strftime("%d", $date_debut)."/".strftime("%m", $date_debut)."/".strftime("%Y", $date_debut);
-	$display_date_fin = strftime("%d", $date_fin)."/".strftime("%m", $date_fin)."/".strftime("%Y", $date_fin);
-	$display_date_decompte = strftime("%d", $date_decompte)."/".strftime("%m", $date_decompte)."/".strftime("%Y", $date_decompte);
-
-	// Récupération du nombre de secondes
-	$tmp_sec_decompte=$date_decompte-mktime(0,0,0,strftime("%m", $date_decompte),strftime("%d", $date_decompte),strftime("%Y", $date_decompte));
-	$tmp_heure_decompte=floor($tmp_sec_decompte/3600);
-	$tmp_minute_decompte=floor(($tmp_sec_decompte-3600*$tmp_heure_decompte)/60);
-	$display_heure_decompte=sprintf("%02d",$tmp_heure_decompte).":".sprintf("%02d",$tmp_minute_decompte);
-} else {
-	$titre_mess = "Nouveau message";
-	if (isset($contenu_cor)) $contenu = $contenu_cor ; else $contenu = '';
-	//if (isset($_POST['display_date_debut']) and isset($_POST['display_date_fin'])) {
-	if (isset($_POST['display_date_debut']) and isset($_POST['display_date_fin']) and isset($_POST['display_date_decompte'])) {
-		$display_date_debut = $_POST['display_date_debut'];
-		$display_date_fin = $_POST['display_date_fin'];
-		$display_date_decompte = $_POST['display_date_decompte'];
-	} else {
-		$annee = strftime("%Y");
-		$mois = strftime("%m");
-		$jour = strftime("%d");
-		$display_date_debut = $jour."/".$mois."/".$annee;
-		$annee = strftime("%Y",time()+86400);
-		$mois = strftime("%m",time()+86400);
-		$jour = strftime("%d",time()+86400);
-		$display_date_fin = $jour."/".$mois."/".$annee;
-		$display_date_decompte = $display_date_fin;
-	}
-	$display_heure_decompte=isset($_POST['display_heure_decompte']) ? $_POST['display_heure_decompte'] : "08:00";
-	if (!isset($statuts_destinataires)) $statuts_destinataires = '_';
-
-}
-echo "<table style=\"border:1px solid black\" cellpadding=\"5\" cellspacing=\"0\"><tr><td>\n";
-echo "<form action=\"./index.php#debut_de_page\" method=\"post\" style=\"width: 100%;\" name=\"formulaire\">\n";
-echo "<fieldset style='border: 1px solid grey; background-image: url(\"../images/background/opacite50.png\");'>\n";
-echo add_token_field();
-if (isset($id_mess)) echo "<input type=\"hidden\" name=\"id_mess\" value=\"$id_mess\" />\n";
-echo "<input type=\"hidden\" name=\"action\" value=\"message\" />\n";
-
-
-echo "<table border=\"0\" width = \"100%\" cellspacing=\"1\" cellpadding=\"1\" >\n";
-
-// Aide
-$titre_infobulle="AIDE\n";
-$texte_infobulle="Un message peut être adressé à :<br />- tous les utilisateurs ayant le(s) même(s) statut(s) ;<br />- ou un utilisateur particulier ;<br />- ou tous les professeurs enseignant dans une même classe.<br /><br />Attention : seuls les messages adressés uniquement à des utilisateurs de même(s) statut(s) peuvent être modifiés après enregistrement.<br /><br />\n";
-//$texte_infobulle.="\n";
-$tabdiv_infobulle[]=creer_div_infobulle('aide',$titre_infobulle,"",$texte_infobulle,"",35,0,'y','y','n','n');
-
-// Titre
-echo "<tr><td colspan=\"3\"><span class='grand'>".$titre_mess." ";
-echo "<a href=\"#\" onclick='return false;' onmouseover=\"afficher_div('aide','y',100,100);\"  onmouseout=\"cacher_div('aide');\"><img src='../images/icons/ico_aide.png' width='15' height='25' /></a>";
-echo "</span></td></tr>\n";
-
-
-//Dates
-echo "<tr><td colspan=\"3\">\n";
-echo "<p><i>Le message sera affiché :</i><br />de la date : ";
-echo "<input type='text' name = 'display_date_debut' id= 'display_date_debut' size='10' value = \"".$display_date_debut."\" onKeyDown=\"clavier_date(this.id,event);\" AutoComplete=\"off\" />\n";
-
-//echo "<a href=\"#\" onClick=\"".$cal1->get_strPopup('../lib/calendrier/pop.calendrier.php', 350, 170)."\"><img src=\"../lib/calendrier/petit_calendrier.gif\" border=\"0\" alt=\"Calendrier\" /></a>\n";
-echo img_calendrier_js("display_date_debut", "img_bouton_display_date_debut");
-
-echo "&nbsp;à la date : ";
-echo "<input type='text' name = 'display_date_fin' id = 'display_date_fin' size='10' value = \"".$display_date_fin."\" onKeyDown=\"clavier_date(this.id,event);\" AutoComplete=\"off\" />\n";
-//echo "<a href=\"#\" onClick=\"".$cal2->get_strPopup('../lib/calendrier/pop.calendrier.php', 350, 170)."\"><img src=\"../lib/calendrier/petit_calendrier.gif\" border=\"0\" alt=\"Calendrier\" /></a>\n";
-echo img_calendrier_js("display_date_fin", "img_bouton_display_date_fin");
-
-echo "(<span style='font-size:small'>Respectez le format jj/mm/aaaa</span>)<br /><br /></p></td></tr>\n";
-
-//Date pour décompte
-echo "<tr><td colspan=\"3\">\n";
-echo "<p><i>Décompte des jours jusqu'au :</i> ";
-echo "<input type='text' name = 'display_date_decompte' id= 'display_date_decompte' size='10' value = \"".$display_date_decompte."\" onKeyDown=\"clavier_date(this.id,event);\" AutoComplete=\"off\" />\n";
-//echo "<a href=\"#\" onClick=\"".$cal3->get_strPopup('../lib/calendrier/pop.calendrier.php', 350, 170)."\"><img src=\"../lib/calendrier/petit_calendrier.gif\" border=\"0\" alt=\"Calendrier\" /></a>\n";
-echo img_calendrier_js("display_date_decompte", "img_bouton_display_date_decompte");
-
-echo " à <input type='text' name = 'display_heure_decompte' id= 'display_heure_decompte' size='5' value = \"".$display_heure_decompte."\" onKeyDown=\"clavier_heure(this.id,event);\" AutoComplete=\"off\" />\n";
-echo "<span style='font-size:small'>(Respectez le format jj/mm/aaaa)<br />Saisir une chaine <b>_DECOMPTE_</b> dans le corps du message pour que cette date soit prise en compte.</span>\n";
-
-$titre_infobulle="DECOMPTE\n";
-$texte_infobulle="Afin d'afficher un compte à rebours, vous devez écrire un texte du style&nbsp;:<br />Il vous reste _DECOMPTE_ pour saisir vos appréciations du 1er trimestre.\n";
-//$texte_infobulle.="\n";
-$tabdiv_infobulle[]=creer_div_infobulle('a_propos_DECOMPTE',$titre_infobulle,"",$texte_infobulle,"",35,0,'y','y','n','n');
-
-echo "<a href=\"#\" onclick='return false;' onmouseover=\"afficher_div('a_propos_DECOMPTE','y',100,100);\"  onmouseout=\"cacher_div('a_propos_DECOMPTE');\"><img src='../images/icons/ico_aide.png' width='15' height='25' /></a>";
-echo "<br /><br />";
-echo "</p>";
-
-echo "</td></tr>\n";
-
-//Destinataires
-echo "<tr><td  colspan=\"3\"><i>Statut(s) des destinataires du message :</i></td></tr>\n";
-echo "<tr>\n";
-echo "<td width=\"33%\"><input type=\"checkbox\" id=\"desti_p\" name=\"desti_p\" value=\"desti_p\"";
-if (strpos($statuts_destinataires, "p")) {echo "checked";}
-echo " onchange='check_et_acces_champ_suppression_message()'";
-echo " /><label for='desti_p' style='cursor: pointer;'>Professeurs</label></td>\n";
-
-echo "<td width=\"33%\"><input type=\"checkbox\" id=\"desti_c\" name=\"desti_c\" value=\"desti_c\"";
-if (strpos($statuts_destinataires, "c")) {echo "checked";}
-echo " onchange='check_et_acces_champ_suppression_message()'";
-echo " /><label for='desti_c' style='cursor: pointer;'>C.P.E.</label></td>\n";
-
-echo "<td><input type=\"checkbox\" id=\"desti_s\" name=\"desti_s\" value=\"desti_s\"";
-if (strpos($statuts_destinataires, "s")) {echo "checked";}
-echo " onchange='check_et_acces_champ_suppression_message()'";
-echo " /><label for='desti_s' style='cursor: pointer;'>Scolarité</label></td>\n";
-echo "</tr>\n";
-
-echo "<tr>\n";
-echo "<td width=\"33%\"><input type=\"checkbox\" id=\"desti_a\" name=\"desti_a\" value=\"desti_a\"";
-if (strpos($statuts_destinataires, "a")) {echo "checked";}
-echo " onchange='check_et_acces_champ_suppression_message()'";
-echo " /><label for='desti_a' style='cursor: pointer;'>Administrateur</label></td>\n";
-
-echo "<td width=\"33%\"><input type=\"checkbox\" id=\"desti_r\" name=\"desti_r\" value=\"desti_r\"";
-if (strpos($statuts_destinataires, "r")) {echo "checked";}
-echo " onchange='check_et_acces_champ_suppression_message()'";
-echo " /><label for='desti_r' style='cursor: pointer;'>Responsables</label></td>\n";
-
-echo "<td><input type=\"checkbox\" id=\"desti_e\" name=\"desti_e\" value=\"desti_e\"";
-if (strpos($statuts_destinataires, "e")) {echo "checked";}
-echo " onchange='check_et_acces_champ_suppression_message()'";
-echo " /><label for='desti_e' style='cursor: pointer;'>Elèves</label></td>\n";
-
-echo "</tr>\n";
-
-
-echo "<tr><td  colspan=\"3\" >\n";
-?>
-<br>
-<i>Personnel destinataire du message&nbsp;:&nbsp;</i><br />
-	<select name="login_destinataire" style="margin-left: 20px; max-width: 500px; width: 300px;">
-		<optgroup>
-		<option></option>
-	<?php
-	$r_sql="SELECT login,nom,prenom,etat, statut FROM utilisateurs WHERE statut IN ('administrateur','professeur','cpe','scolarite','secours','autre') ORDER BY nom,prenom";
-	$R_utilisateurs=mysqli_query($GLOBALS["mysqli"], $r_sql);
-	$initiale_courante=0;
-	while($utilisateur=mysqli_fetch_array($R_utilisateurs))
-		{
-		$nom=mb_strtoupper($utilisateur['nom'])." ".$utilisateur['prenom'];
-		$initiale=ord(mb_strtoupper($nom));
-		if ($initiale!=$initiale_courante)
-			{
-			$initiale_courante=$initiale;
-			echo "\t</optgroup><optgroup label=\"".chr($initiale)."\">";
-			}
-		?>
-		<option value="<?php echo $utilisateur['login']; ?>" <?php if (isset($login_destinataire)) {if ($utilisateur['login']==$login_destinataire) {echo "selected";}} if($utilisateur['etat']=="inactif") { echo " style='background-color:grey;'";} ?> title="<?php echo $utilisateur['statut'];?>"><?php echo $nom." (".$utilisateur['login'].")"; ?></option>
-		<?php
-		}
-	?>
-		</optgroup>
-	</select>
-<br>
-
-<?php
-echo "</td></tr>\n";
-
-echo "<tr><td  colspan=\"3\" >\n";
-?>
-<br>
-<i>Matière enseignée par les destinataires du message&nbsp;:&nbsp;</i><br />
-	<select name="matiere_destinataire" style="margin-left: 20px; max-width: 500px; width: 300px;">
-		<optgroup>
-		<option></option>
-	<?php
-	$r_sql="SELECT DISTINCT m.* FROM utilisateurs u, j_groupes_professeurs jgp, j_groupes_matieres jgm, matieres m
-		WHERE u.login=jgp.login AND
-			jgp.id_groupe=jgm.id_groupe AND
-			jgm.id_matiere=m.matiere
-		ORDER BY m.matiere, m.nom_complet";
-	$R_matieres=mysqli_query($GLOBALS["mysqli"], $r_sql);
-	$initiale_courante=0;
-	while($matiere=mysqli_fetch_array($R_matieres))
-		{
-		/*
-		<option value="<?php echo $matiere['matiere']; ?>" <?php if (isset($matiere_destinataire)) {if ($matiere['matiere']==$matiere_destinataire) {echo "selected";}}?>><?php echo $matiere['matiere']." (".$matiere['nom_complet'].")"; ?></option>
-		*/
-		?>
-		<option value="<?php echo $matiere['matiere']; ?>"><?php echo $matiere['matiere']." (".$matiere['nom_complet'].")"; ?></option>
-		<?php
-		}
-	?>
-		</optgroup>
-	</select>
-<br>
-
-<?php
-echo "</td></tr>\n";
-
-echo "<tr><td  colspan=\"3\" >\n";
-?>
-<br>
-<i>Classe dans laquelle enseignent les destinataires du message&nbsp;:&nbsp;</i><br />
-	<select name="id_classe" style="margin-left: 20px; max-width: 500px; width: 300px;">
-		<optgroup>
-		<option></option>
-	<?php
-	$r_sql="SELECT id,nom_complet,classe FROM classes ORDER BY classe";
-	$R_classes=mysqli_query($GLOBALS["mysqli"], $r_sql);
-	while($classe=mysqli_fetch_array($R_classes))
-		{
-		?>
-		<option value="<?php echo $classe['id']; ?>" <?php if (isset($id_classe)) if ($classe['id']==$id_classe) echo "selected"; ?> title="Déposer un message sur le Panneau d'affichage
-pour tous les professeurs de la classe de <?php echo $classe['classe'];?>.
-Pour information, le <?php echo retourne_denomination_pp($classe['id']);?> de la classe est :
-<?php echo liste_des_prof_suivi_de_telle_classe($classe['id']);?>"><?php
-			echo $classe['nom_complet'];
-			if($classe['nom_complet']!=$classe['classe']) {echo " (".$classe['classe'].")";}
-		?></option>
-		<?php
-		}
-	?>
-		</optgroup>
-	</select>
-<br>
-<?php
-echo "</td></tr>\n";
-
-echo "<tr><td  colspan=\"3\" >\n";
-?>
-<br>
-<i>Élèves de la classe de&nbsp;:&nbsp;</i><br />
-	<select name="eleves_id_classe" style="margin-left: 20px; max-width: 500px; width: 300px;">
-		<optgroup>
-		<option></option>
-	<?php
-	$r_sql="SELECT id,nom_complet,classe FROM classes ORDER BY classe";
-	$R_classes=mysqli_query($GLOBALS["mysqli"], $r_sql);
-	while($classe=mysqli_fetch_array($R_classes))
-		{
-		?>
-		<option value="<?php echo $classe['id']; ?>" <?php if (isset($eleves_id_classe)) if ($classe['id']==$eleves_id_classe) echo "selected"; ?> title="Déposer un message sur le Panneau d'affichage
-pour tous les élèves de la classe de <?php echo $classe['classe'];?>.
-Pour information, le <?php echo retourne_denomination_pp($classe['id']);?> de la classe est :
-<?php echo liste_des_prof_suivi_de_telle_classe($classe['id']);?>"><?php
-			echo $classe['nom_complet'];
-			if($classe['nom_complet']!=$classe['classe']) {echo " (".$classe['classe'].")";}
-		?></option>
-		<?php
-		}
-	?>
-		</optgroup>
-	</select>
-<br>
-
-<?php
-echo "</td></tr>\n";
-
-echo "<tr><td  colspan=\"3\" >\n";
-?>
-<br>
-<i>Responsables des élèves de la classe de&nbsp;:&nbsp;</i><br />
-	<select name="parents_id_classe" style="margin-left: 20px; max-width: 500px; width: 300px;">
-		<optgroup>
-		<option></option>
-	<?php
-	$r_sql="SELECT id,nom_complet,classe FROM classes ORDER BY classe";
-	$R_classes=mysqli_query($GLOBALS["mysqli"], $r_sql);
-	while($classe=mysqli_fetch_array($R_classes))
-		{
-		?>
-		<option value="<?php echo $classe['id']; ?>" <?php if (isset($parents_id_classe)) if ($classe['id']==$parents_id_classe) echo "selected"; ?> title="Déposer un message sur le Panneau d'affichage
-pour tous les responsables (parents,...) d'élèves de la classe de <?php echo $classe['classe'];?>.
-Pour information, le <?php echo retourne_denomination_pp($classe['id']);?> de la classe est :
-<?php echo liste_des_prof_suivi_de_telle_classe($classe['id']);?>"><?php
-			echo $classe['nom_complet'];
-			if($classe['nom_complet']!=$classe['classe']) {echo " (".$classe['classe'].")";}
-		?></option>
-		<?php
-		}
-	?>
-		</optgroup>
-	</select>
-<br>
-
-<?php
-echo "</td></tr>\n";
-
-echo "<tr>\n";
-echo "<td colspan=\"3\"><br /><input type=\"checkbox\" id=\"prof_suivi\" name=\"prof_suivi\" value=\"y\"";
-if (isset($_POST['prof_suivi'])) {echo " checked";}
-echo " /><label for='prof_suivi' style='cursor: pointer;'> Déposer le message pour les \"".getSettingValue('gepi_prof_suivi')."\" actuellement associés aux classes.</label><br /><br />\n";
-echo "</td></tr>\n";
-
-if(getSettingAOui('active_mod_engagements')) {
-	$tab_engagements=get_tab_engagements();
-
-	$chaine_engagements_ele="";
-	$cpt_eng=0;
-	foreach($tab_engagements['indice'] as $key => $current_engagement) {
-		if($current_engagement['ConcerneEleve']=='yes') {
-			$chaine_engagements_ele.="
-			<input type='checkbox' name='engagement_ele[]' id='engagement_ele_$cpt_eng' value='".$current_engagement['id']."' onchange=\"checkbox_change('engagement_ele_$cpt_eng')\" /><label for='engagement_ele_$cpt_eng' id='texte_engagement_ele_$cpt_eng' title=\"".$current_engagement['description']."\">".$current_engagement['nom']."</label> (<em title=\"Effectif des élèves ayant cet engagement : ".$current_engagement['effectif']."\">".$current_engagement['effectif']."</em>)<br />";
-			$cpt_eng++;
-		}
-	}
-
-	if($chaine_engagements_ele!="") {
-		echo "<tr>
-	<td colspan=\"3\" >
-		<i>Élèves ayant un des engagements suivants&nbsp;:&nbsp;</i><br />
-		$chaine_engagements_ele
-		<br />
-	</td>
-</tr>\n";
-	}
-
-	$chaine_engagements_resp="";
-	$cpt_eng=0;
-	foreach($tab_engagements['indice'] as $key => $current_engagement) {
-		if($current_engagement['ConcerneResponsable']=='yes') {
-			$chaine_engagements_resp.="
-			<input type='checkbox' name='engagement_resp[]' id='engagement_resp_$cpt_eng' value='".$current_engagement['id']."' onchange=\"checkbox_change('engagement_resp_$cpt_eng')\" /><label for='engagement_resp_$cpt_eng' id='texte_engagement_resp_$cpt_eng' title=\"".$current_engagement['description']."\">".$current_engagement['nom']."</label> (<em title=\"Effectif des responsable ayant cet engagement : ".$current_engagement['effectif']."\">".$current_engagement['effectif']."</em>)<br />";
-			$cpt_eng++;
-		}
-	}
-
-	/*
-	echo "<pre>";
-	print_r($tab_engagements);
-	echo "</pre>";
-	*/
-
-	if($chaine_engagements_resp!="") {
-		echo "<tr>
-	<td colspan=\"3\" >
-		<i>Responsables ayant un des engagements suivants&nbsp;:&nbsp;</i><br />
-		".$chaine_engagements_resp."<br />
-	</td>
-</tr>\n";
-	}
-}
-
-
-echo "<tr><td  colspan=\"3\" >\n";
-?>
-
-<i>Le destinataire peut supprimer ce message&nbsp;:&nbsp;</i>
-<label for='suppression_possible_oui'>Oui </label><input type="radio" name="suppression_possible" id="suppression_possible_oui" value="oui" />
-<label for='suppression_possible_non'>Non </label><input type="radio" name="suppression_possible" id="suppression_possible_non" value="non" checked="checked" />
-
-<?php
-$titre_infobulle="SUPPRESSION\n";
-$texte_infobulle="Après lecture, un utilisateur ne peut pas supprimer un message si celui-ci est destiné à un ou plusieurs statuts.<br />
-Seuls les messages destinés à des individus, matière précise ou classe précise peuvent être supprimés par leur destinataire.<br />
-<br />
-Lors de la définition d'un message destiné à un ou plusieurs statuts, un seul message est enregistré (<em>il peut ainsi être modifié par la suite</em>)<br />
-En revanche, lors de la saisie d'un message destiné à des individus, classe, matière, il y a autant de messages générés que d'individus (<em>après leur enregistrement, ils ne peuvent plus être modifiés et ils n'apparaissent pas dans la liste sur la gauche</em>).\n";
-//$texte_infobulle.="\n";
-$tabdiv_infobulle[]=creer_div_infobulle('SUPPRESSION',$titre_infobulle,"",$texte_infobulle,"",35,0,'y','y','n','n');
-
-echo "<a href=\"#\" onclick='return false;' onmouseover=\"afficher_div('SUPPRESSION','y',100,100);\"  onmouseout=\"cacher_div('SUPPRESSION');\"><img src='../images/icons/ico_aide.png' width='15' height='25' /></a>";
-?>
-<br><br>
-
-<?php
-if (getSettingAOui('autorise_envoi_sms')) {
-?>
-	<i>Envoyer une copie du message par SMS&nbsp;:&nbsp;</i>
-	<label for='envoi_sms_oui'>Oui </label><input type="radio" name="envoi_sms" id="envoi_sms_oui" value="oui" />
-	<label for='envoi_sms_non'>Non </label><input type="radio" name="envoi_sms" id="envoi_sms_non" value="non" checked="checked" />
-
-<?php
-	$titre_infobulle="Envoi de SMS\n";
-	$texte_infobulle="Le message sera également envoyé en SMS aux destinataires (responsables et/ou élèves) dont le numéro de portable est renseigné.\n Il faut dans ce cas saisir un message simple et ne contenant aucune mise en forme particulière.\n";
-	$tabdiv_infobulle[]=creer_div_infobulle('envoi_sms',$titre_infobulle,"",$texte_infobulle,"",35,0,'y','y','n','n');
-
-	echo "<a href=\"#\" onclick='return false;' onmouseover=\"afficher_div('envoi_sms','y',100,100);\"  onmouseout=\"cacher_div('envoi_sms');\"><img src='../images/icons/ico_aide.png' width='15' height='25' /></a>";
-}?>
-<br><br>
-
-<?php
-echo js_checkbox_change_style('checkbox_change', 'texte_', "y", 0.5);
-
-echo "</td></tr>\n";
-
-// Message
-echo "<tr><td  colspan=\"3\">\n";
-
-echo "<i>Mise en forme du message :</i>\n";
-
-?>
-
-<textarea name="message" id ="message" style="border: 1px solid gray; width: 600px; height: 250px;"><?php echo $contenu; ?></textarea>
-<script type='text/javascript'>
-// Configuration via JavaScript
-CKEDITOR.replace('message',{
-    customConfig: '../lib/ckeditor_gepi_config.js'
-});
-</script>
-
-<?php
-
-echo "</td></tr>";
-
-// Boutons Enregistrer - Annuler
-echo "<tr><td colspan=\"3\" align=\"center\"> ";
-
-echo "<input type='hidden' name='ok' value='y' />\n";
-
-echo "<noscript><input type=\"submit\" value=\"Enregistrer\" style=\"font-variant: small-caps;\" name=\"button_ok_sans_javascript\" /></noscript>\n";
-//echo "<input type=\"submit\" value=\"Enregistrer\" style=\"font-variant: small-caps;\" name=\"ok\" onclick=\"check_et_valide_form()\" />\n";
-echo "<input type=\"button\" value=\"Enregistrer\" style=\"font-variant: small-caps;\" name=\"button_ok_avec_javascript\" onclick=\"check_et_valide_form()\" />\n";
-
-echo "<script type='text/javascript'>
-function checkdate (m, d, y) {
-    // Returns true(1) if it is a valid date in gregorian calendar  
-    // 
-    // version: 1109.2015
-    // discuss at: http://phpjs.org/functions/checkdate    
-    // +   original by: Kevin van Zonneveld (http://kevin.vanzonneveld.net)
-    // +   improved by: Pyerre
-    // +   improved by: Theriault
-    // *     example 1: checkdate(12, 31, 2000);
-    // *     returns 1: true    // *     example 2: checkdate(2, 29, 2001);
-    // *     returns 2: false
-    // *     example 3: checkdate(3, 31, 2008);
-    // *     returns 3: true
-    // *     example 4: checkdate(1, 390, 2000);    
-    // *     returns 4: false
-    return m > 0 && m < 13 && y > 2000 && y < 32768 && d > 0 && d <= (new Date(y, m, 0)).getDate();
-}
-function check_et_valide_form() {
-	display_date_debut=document.getElementById('display_date_debut').value;
-	display_date_fin=document.getElementById('display_date_fin').value;
-
-	tmp=display_date_debut.split('/');
-	jour_debut=tmp[0];
-	mois_debut=tmp[1];
-	annee_debut=tmp[2];
-	if(!checkdate(mois_debut,jour_debut,annee_debut)) {
-		alert('La date de début d\'affichage est invalide.');
+if((($_SESSION['statut']=="administrateur")||
+	(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfSaisieAbsScol')))||
+	(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfSaisieAbsCpe'))))&&
+	(isset($mode))&&($mode=="suppr_abs")) {
+
+	echo "<a name=\"debut_de_page\"></a>
+<p class='bold'>
+	<a href='".$_SERVER['PHP_SELF']."'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a>
+</p>
+
+<h2>Absences de professeurs</h2>";
+
+	$sql="SELECT * FROM abs_prof WHERE date_fin>='".strftime("%Y-%m-%d %H:%M:%S")."';";
+	$res=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res)==0) {
+		echo "
+<p>Aucune absence à venir n'est saisie.</p>";
 	}
 	else {
-		tmp=display_date_fin.split('/');
-		jour_fin=tmp[0];
-		mois_fin=tmp[1];
-		annee_fin=tmp[2];
-		if(!checkdate(mois_fin,jour_fin,annee_fin)) {
-			alert('La date de fin d\'affichage est invalide.');
+		echo "
+<form action=\"".$_SERVER['PHP_SELF']."\" method=\"post\">
+	<fieldset class='fieldset_opacite50'>
+		".add_token_field()."
+		<input type='hidden' name='mode' value='suppr_abs' />
+
+		<p>Les absences à venir sont les suivantes.<br />
+		Cochez les absences que vous souhaitez supprimer.<br />
+		Les propositions de remplacements et affichages associés seront supprimés également.</p>";
+		$cpt=0;
+		while($lig=mysqli_fetch_object($res)) {
+			echo "<p><input type='checkbox' name='suppr_abs[]' id='suppr_abs_$cpt' value='$lig->id' /><label for='suppr_abs_$cpt'> Absence de ".civ_nom_prenom($lig->login_user)." entre le ".formate_date($lig->date_debut, "y2", "court")." et le ".formate_date($lig->date_fin, "y2", "court")."</label></p>
+			<div style='margin-left:2em; color:green;'".$lig->description."</div>";
+			$cpt++;
 		}
-		else {
-			t1=eval(annee_debut*10000+mois_debut*100+jour_debut)
-			t2=eval(annee_fin*10000+mois_fin*100+jour_fin)
-			if(t2<=t1) {
-				alert('La date de fin d\'affichage doit dépasser celle de début.')
+		echo "
+		<p><input type='submit' value=\"Supprimer les absences cochées\" /></p>
+	</fieldset>
+</form>";
+
+
+	}
+
+	require("../lib/footer.inc.php");
+	die();
+}
+
+echo "<a name=\"debut_de_page\"></a>
+<p class='bold'>
+	<a href='../accueil.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a>
+</p>
+
+<h2>Absences de professeurs</h2>
+<ul>";
+
+if(($_SESSION['statut']=="administrateur")||
+($_SESSION['statut']=="scolarite")||
+($_SESSION['statut']=="cpe")) {
+
+
+	if(($_SESSION['statut']=="administrateur")||
+	(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfSaisieAbsScol')))||
+	(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfSaisieAbsCpe')))) {
+		echo "
+	<li>
+		<p><a href='saisir_absence.php'>Saisir une absence</a></p>
+	</li>";
+	}
+
+	$sql="SELECT * FROM abs_prof WHERE date_fin>='".strftime('%Y-%m-%d %H:%M:%S')."' ORDER BY date_debut;";
+	//echo "$sql<br />";
+	$res=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res)==0) {
+		echo "
+	<li>
+		<p><span style='color:red'>Aucune absence à venir ou en cours n'est saisie.</span></p>
+	</li>";
+	}
+	else {
+		echo "
+	<li>
+		<p><strong>Suivre les propositions de remplacements&nbsp;:</strong></p>
+		<table class='boireaus boireaus_alt'>
+			<thead>
+				<tr>
+					<th colspan='3'>Absences</th>
+					<th colspan='4'>Propositions de remplacements</th>
+					<th rowspan='2'>Remplacements</th>
+					<th rowspan='2'>Afficher<br />Informer les familles</th>
+				</tr>
+				<tr>
+					<th>Id</th>
+					<th>Prof</th>
+					<th>Dates</th>
+
+					<th>Créneaux proposés</th>
+					<th>Accepté</th>
+					<th>Rejeté</th>
+					<th>Validé</th>
+				</tr>
+			</thead>
+			<tbody>";
+
+		$nom_classe=array();
+		$nom_prof=array();
+		while($lig=mysqli_fetch_object($res)) {
+			$ts1=mysql_date_to_unix_timestamp($lig->date_debut);
+			$date_heure=french_strftime("Du %A %d/%m/%Y %H:%M", $ts1);
+			$ts2=mysql_date_to_unix_timestamp($lig->date_fin);
+			$date_heure.="<br />".french_strftime(" au %A %d/%m/%Y %H:%M", $ts2);
+			//formate_date($lig->date_debut,"y")."<br />au ".formate_date($lig->date_fin,"y")
+
+			echo "
+				<tr>";
+			if(($_SESSION['statut']=="administrateur")||
+			(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfSaisieAbsScol')))||
+			(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfSaisieAbsCpe')))) {
+				echo "
+					<td><a href='saisir_absence.php?id_absence=$lig->id' title=\"Consulter/Modifier l'absence\">".$lig->id."</a></td>
+					<td><a href='saisir_absence.php?id_absence=$lig->id' title=\"Consulter/Modifier l'absence\">".civ_nom_prenom($lig->login_user)."</a></td>
+					<td><a href='saisir_absence.php?id_absence=$lig->id' title=\"Consulter/Modifier l'absence\">".$date_heure."</a></td>";
 			}
 			else {
-				document.formulaire.submit();
+				echo "
+				<td>".$lig->id."</td>
+				<td>".civ_nom_prenom($lig->login_user)."</td>
+				<td>".$date_heure."</td>";
+			}
+
+			$sql="SELECT DISTINCT jour, id_creneau FROM abs_prof_remplacement WHERE id_absence='$lig->id';";
+			$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+			$nb=mysqli_num_rows($res_rempl);
+			if(($_SESSION['statut']=="administrateur")||
+			(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfProposerRemplacementScol')))||
+			(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfProposerRemplacementCpe')))) {
+				echo "
+					<td title='$nb créneaux avec remplacement proposé.\n\nCliquer pour consulter/modifier/ effectuer des propositions.'><a href='proposer_remplacement.php?id_absence=$lig->id'>$nb</a></td>";
+			}
+			else {
+			echo "
+					<td title='$nb créneaux avec remplacement proposé.'>";
+				echo $nb;
+			echo "</td>";
+			}
+
+			$sql="SELECT 1=1 FROM abs_prof_remplacement WHERE id_absence='$lig->id' AND reponse='oui';";
+			$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+			$nb=mysqli_num_rows($res_rempl);
+			if(($nb>0)&&
+				(($_SESSION['statut']=="administrateur")||
+				(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfAttribuerRemplacementScol')))||
+				(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfAttribuerRemplacementCpe'))))) {
+				echo "
+					<td><a href='attribuer_remplacement.php'>".$nb."</a></td>";
+			}
+			else {
+				echo "
+						<td title='$nb réponses positives.'>".$nb."</td>";
+			}
+
+			$sql="SELECT 1=1 FROM abs_prof_remplacement WHERE id_absence='$lig->id' AND reponse='non';";
+			$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+			$nb=mysqli_num_rows($res_rempl);
+			echo "
+					<td title='$nb réponses négatives.'>".$nb."</td>";
+
+			$sql="SELECT * FROM abs_prof_remplacement WHERE id_absence='$lig->id' AND validation_remplacement='oui' ORDER BY date_debut_r, id_classe;";
+			$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+			$nb=mysqli_num_rows($res_rempl);
+			echo "
+					<td title='$nb remplacements validés.'>".$nb."</td>";
+
+			// Liste des remplacements
+			echo "
+					<td>
+						<table class='boireaus boireaus_alt'>";
+			while($lig_rempl=mysqli_fetch_object($res_rempl)) {
+				$ts1=mysql_date_to_unix_timestamp($lig_rempl->date_debut_r);
+				$date_heure=french_strftime("%A %d/%m/%Y de %H:%M", $ts1);
+				$ts2=mysql_date_to_unix_timestamp($lig_rempl->date_fin_r);
+				$date_heure.=strftime(" à %H:%M", $ts2);
+
+
+				$style="";
+				if($ts2<time()) {
+					$style=" style='background-color:grey;'";
+				}
+
+				echo "
+							<tr$style>
+								<td>";
+				if(!isset($nom_classe[$lig_rempl->id_classe])) {
+					$nom_classe[$lig_rempl->id_classe]=get_nom_classe($lig_rempl->id_classe);
+				}
+				echo $nom_classe[$lig_rempl->id_classe];
+
+				echo "
+								</td>
+								<td>";
+				echo $date_heure;
+				echo "
+								</td>
+								<td>";
+
+				if(!isset($nom_prof[$lig_rempl->login_user])) {
+					$nom_prof[$lig_rempl->login_user]=affiche_utilisateur($lig_rempl->login_user, $lig_rempl->id_classe);
+				}
+				echo $nom_prof[$lig_rempl->login_user];
+				echo "
+								</td>
+							</tr>";
+			}
+			echo "
+						</table>
+					</td>";
+
+			// Familles informées
+			$sql="SELECT 1=1 FROM abs_prof_remplacement WHERE id_absence='$lig->id' AND validation_remplacement='oui' AND info_famille='oui';";
+			$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+			$nb=mysqli_num_rows($res_rempl);
+			echo "
+					<td><a href='afficher_remplacements.php?mode=tous'>".$nb."</a></td>";
+
+
+			echo "
+				</tr>";
+		}
+
+		echo "
+			</tbody>
+		</table>
+	</li>";
+
+	}
+
+	// Conserver des liens pour valider après coup,...
+	// Le tableau ne donne que l'en-cours
+
+	/*
+	echo "
+<p>Choix&nbsp;:</p>
+<ul>";
+
+	if(($_SESSION['statut']=="administrateur")||
+	(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfSaisieAbsScol')))||
+	(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfSaisieAbsCpe')))) {
+		echo "
+	<li><a href='saisir_absence.php'>Saisir une absence</a></li>";
+	}
+
+	if(($_SESSION['statut']=="administrateur")||
+	(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfSaisieAbsScol')))||
+	(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfSaisieAbsCpe')))) {
+		echo "
+	<li>Consulter/modifier les absences à venir, en cours, proposer des remplacements&nbsp;:<br />";
+
+		$sql="SELECT * FROM abs_prof WHERE date_fin>='".strftime('%Y-%m-%d %H:%M:%S')."' ORDER BY date_debut;";
+		//echo "$sql<br />";
+		$res=mysqli_query($GLOBALS["mysqli"], $sql);
+		if(mysqli_num_rows($res)==0) {
+			echo "<span style='color:red'>Aucune absence à venir ou en cours n'est saisie.</span>";
+		}
+		else {
+			while($lig=mysqli_fetch_object($res)) {
+				$chaine_nb_creneaux_remplacement_propose="";
+				$sql="SELECT DISTINCT jour, id_creneau FROM abs_prof_remplacement WHERE id_absence='$lig->id';";
+				$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+				if(mysqli_num_rows($res_rempl)>0) {
+					$chaine_nb_creneaux_remplacement_propose=" (<em>".mysqli_num_rows($res_rempl)." créneaux avec remplacement proposé</em>)";
+				}
+
+				$chaine_nb_creneaux_remplacement_valides="";
+				$sql="SELECT DISTINCT jour, id_creneau FROM abs_prof_remplacement WHERE id_absence='$lig->id' AND validation_remplacement='oui';";
+				$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+				if(mysqli_num_rows($res_rempl)>0) {
+					$chaine_nb_creneaux_remplacement_valides=" (<em>".mysqli_num_rows($res_rempl)." créneaux avec remplacement validé</em>)";
+				}
+
+				echo "
+		<strong>Absence n°$lig->id&nbsp;:</strong> <a href='saisir_absence.php?id_absence=$lig->id'>".civ_nom_prenom($lig->login_user)." (<em>du ".formate_date($lig->date_debut,"y")." au ".formate_date($lig->date_fin,"y")."</em>)</a>".$chaine_nb_creneaux_remplacement_propose.$chaine_nb_creneaux_remplacement_valides."<br />";
 			}
 		}
 	}
-}
 
-function check_et_acces_champ_suppression_message() {
-	var tab=new Array('desti_a', 'desti_c', 'desti_e', 'desti_p', 'desti_r', 'desti_s');
-	var acces='y';
+	if(($_SESSION['statut']=="administrateur")||
+	(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfProposerRemplacementScol')))||
+	(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfProposerRemplacementCpe')))) {
+		echo "</li>
+	<li>Proposer des remplacements&nbsp;:<br />";
 
-	for(i=0;i<tab.length;i++) {
-		if(document.getElementById(tab[i]).checked==true) {
-			acces='n';
-			break;
+		$sql="SELECT * FROM abs_prof WHERE date_fin>='".strftime('%Y-%m-%d %H:%M:%S')."' ORDER BY date_debut;";
+		//echo "$sql<br />";
+		$res=mysqli_query($GLOBALS["mysqli"], $sql);
+		if(mysqli_num_rows($res)==0) {
+			echo "<span style='color:red'>Aucune absence à venir ou en cours n'est saisie.</span>";
+		}
+		else {
+			while($lig=mysqli_fetch_object($res)) {
+				$chaine_nb_creneaux_remplacement_propose="";
+				$sql="SELECT DISTINCT jour, id_creneau FROM abs_prof_remplacement WHERE id_absence='$lig->id';";
+				$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+				if(mysqli_num_rows($res_rempl)>0) {
+					$chaine_nb_creneaux_remplacement_propose=" (<em>".mysqli_num_rows($res_rempl)." créneaux avec remplacement proposé</em>)";
+				}
+
+				$chaine_nb_creneaux_remplacement_valides="";
+				$sql="SELECT DISTINCT jour, id_creneau FROM abs_prof_remplacement WHERE id_absence='$lig->id' AND validation_remplacement='oui';";
+				$res_rempl=mysqli_query($GLOBALS["mysqli"], $sql);
+				if(mysqli_num_rows($res_rempl)>0) {
+					$chaine_nb_creneaux_remplacement_valides=" (<em>".mysqli_num_rows($res_rempl)." créneaux avec remplacement validé</em>)";
+				}
+
+				echo "
+		<strong>Absence n°$lig->id&nbsp;:</strong> <a href='proposer_remplacement.php?id_absence=$lig->id'>".civ_nom_prenom($lig->login_user)." (<em>du ".formate_date($lig->date_debut,"y")." au ".formate_date($lig->date_fin,"y")."</em>)</a>".$chaine_nb_creneaux_remplacement_propose.$chaine_nb_creneaux_remplacement_valides."<br />";
+			}
+		}
+		echo "
+	</li>";
+	}
+	*/
+
+	if(($_SESSION['statut']=="administrateur")||
+	(($_SESSION['statut']=="scolarite")&&(getSettingAOui('AbsProfAttribuerRemplacementScol')))||
+	(($_SESSION['statut']=="cpe")&&(getSettingAOui('AbsProfAttribuerRemplacementCpe')))) {
+		$tab_propositions_avec_reponse_positive=array();
+		$sql="SELECT * FROM abs_prof_remplacement WHERE date_debut_r>='".strftime('%Y-%m-%d %H:%M:%S')."' AND reponse='oui';";
+		$res=mysqli_query($GLOBALS["mysqli"], $sql);
+		if(mysqli_num_rows($res)>0) {
+			while($lig=mysqli_fetch_object($res)) {
+				if(check_proposition_remplacement_validee2($lig->id)=="") {
+					// Créneau sans remplacement programmé
+					$tab_propositions_avec_reponse_positive[]=$lig->id;
+				}
+			}
+		}
+		if(count($tab_propositions_avec_reponse_positive)>0) {
+			echo "
+	<li>
+		<p><strong>Remplacements à venir&nbsp;:</strong><br />".count($tab_propositions_avec_reponse_positive)." proposition(s) a(ont) reçu une réponse favorable (<em>pour des cours/créneaux dont le remplacement n'est pas encore attribué</em>).<br />
+		<a href='attribuer_remplacement.php'>Valider/attribuer le(s) remplacement(s)</a></p>
+	</li>";
+		}
+
+
+		$tab_remplacements=array();
+		//$sql="SELECT * FROM abs_prof_remplacement WHERE date_debut_r<'".strftime('%Y-%m-%d %H:%M:%S')."';";
+		$sql="SELECT DISTINCT id_absence, id_classe, id_groupe, id_aid, jour, id_creneau FROM abs_prof_remplacement WHERE date_debut_r<'".strftime('%Y-%m-%d %H:%M:%S')."';";
+		$res=mysqli_query($GLOBALS["mysqli"], $sql);
+		if(mysqli_num_rows($res)>0) {
+			$tab_remplacements_creneaux_testes=array();
+			while($lig=mysqli_fetch_object($res)) {
+				if(!in_array($lig->id_absence."|".$lig->id_groupe."|".$lig->id_aid."|".$lig->id_classe."|".$lig->jour."|".$lig->id_creneau ,$tab_remplacements_creneaux_testes)) {
+					if(check_proposition_remplacement_validee($lig->id_absence, $lig->id_groupe, $lig->id_aid, $lig->id_classe, $lig->jour, $lig->id_creneau)=="") {
+						// Créneau sans remplacement programmé
+						$tab_remplacements[]=$lig->id_absence."|".$lig->id_groupe."|".$lig->id_aid."|".$lig->id_classe."|".$lig->jour."|".$lig->id_creneau;
+					}
+					$tab_remplacements_creneaux_testes[]=$lig->id_absence."|".$lig->id_groupe."|".$lig->id_aid."|".$lig->id_classe."|".$lig->jour."|".$lig->id_creneau;
+				}
+			}
+		}
+		if(count($tab_remplacements)>0) {
+			echo "
+	<li>
+		<p><strong>Éventuels remplacements passés non validés&nbsp;:</strong><br />".count($tab_remplacements)." remplacement(s) de cours (<em>dans le passé</em>) n'a(ont) pas été enregistré(s).<br />
+		S'il(s) a(ont) eu lieu, vous pouvez les attribuer maintenant à des fins de statistiques/totaux dans le cas où des rémunérations de remplacements sont prévues.<br />
+		<a href='attribuer_remplacement.php?mode=anciens'>Valider/attribuer le(s) remplacement(s)</a></p>
+	</li>";
 		}
 	}
 
-	if(acces=='y') {
-		document.getElementById('suppression_possible_oui').disabled=false;
-		document.getElementById('suppression_possible_non').disabled=false;
+	echo "
+	<li><p><a href='afficher_remplacements.php'>Afficher les remplacements validés</a> et informer ou non les familles.</p></li>";
+	$sql="SELECT * FROM abs_prof WHERE date_fin>='".strftime("%Y-%m-%d %H:%M:%S")."';";
+	$res=mysqli_query($GLOBALS["mysqli"], $sql);
+	if(mysqli_num_rows($res)==0) {
+		echo "
+	<li>Supprimer des absences à venir saisies&nbsp;: Aucune absence à venir n'est saisie.</li>";
 	}
 	else {
-		// On coche l'interdiction de suppression de message:
-		document.getElementById('suppression_possible_non').checked=true;
-
-		document.getElementById('suppression_possible_oui').disabled=true;
-		document.getElementById('suppression_possible_non').disabled=true;
+		echo "
+	<li><a href='".$_SERVER['PHP_SELF']."?mode=suppr_abs'>Supprimer des absences à venir saisies</a></li>";
 	}
+	echo "
+	<li><a href='consulter_remplacements.php'>Consulter les absences passées pour générer des listes d'absences, de remplacements,... entre telle date et telle date</a>.</li>
+</ul>";
+
+
+echo "<p style='color:red; margin-top:1em; text-indent:-5em; margin-left:5em;'>A FAIRE : 
+Pouvoir afficher tous les remplacements à effectuer pour une journée donnée de façon à proposer au mieux les remplacements aux divers professeurs (a priori) disponibles.<br />
+Pouvoir générer un tableau/listing des remplacements par semaine.<br />
+</p>";
+
 }
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+elseif($_SESSION['statut']=="professeur") {
+
+	//============================================================================================================
+	// Dispositif pour l'affichage EDT en infobulle
+	if(getSettingAOui('autorise_edt_tous')) {
+
+		$titre_infobulle="EDT de <span id='id_ligne_titre_infobulle_edt'></span>";
+		$texte_infobulle="";
+		$tabdiv_infobulle[]=creer_div_infobulle('edt_prof',$titre_infobulle,"",$texte_infobulle,"",40,0,'y','y','n','n');
+
+		function affiche_lien_edt_prof($login_prof, $info_prof) {
+			return " <a href='../edt_organisation/index_edt.php?login_edt=".$login_prof."&amp;type_edt_2=prof&amp;no_entete=y&amp;no_menu=y&amp;lien_refermer=y' onclick=\"affiche_edt_prof_en_infobulle('$login_prof', '".addslashes($info_prof)."');return false;\" title=\"Emploi du temps de ".$info_prof."\" target='_blank'><img src='../images/icons/edt.png' class='icone16' alt='EDT' /></a>";
+		}
+
+		$titre_infobulle="EDT de la classe de <span id='span_id_nom_classe'></span>";
+		$texte_infobulle="";
+		$tabdiv_infobulle[]=creer_div_infobulle('edt_classe',$titre_infobulle,"",$texte_infobulle,"",40,0,'y','y','n','n');
+
+		echo "
+<style type='text/css'>
+	.lecorps {
+		margin-left:0px;
+	}
+</style>
+
+<script type='text/javascript'>
+	function affiche_edt_classe_en_infobulle(id_classe, classe) {
+		document.getElementById('span_id_nom_classe').innerHTML=classe;
+
+		new Ajax.Updater($('edt_classe_contenu_corps'),'../edt_organisation/index_edt.php?login_edt='+id_classe+'&type_edt_2=classe&visioedt=classe1&no_entete=y&no_menu=y&mode_infobulle=y',{method: 'get'});
+		afficher_div('edt_classe','y',-20,20);
+	}
+
+	function affiche_edt_prof_en_infobulle(login_prof, info_prof) {
+		document.getElementById('id_ligne_titre_infobulle_edt').innerHTML=info_prof;
+
+		new Ajax.Updater($('edt_prof_contenu_corps'),'../edt_organisation/index_edt.php?login_edt='+login_prof+'&type_edt_2=prof&no_entete=y&no_menu=y&mode_infobulle=y',{method: 'get'});
+		afficher_div('edt_prof','y',-20,20);
+	}
 </script>\n";
+	}
+	else {
+		function affiche_lien_edt_prof($login_prof, $info_prof) {
+			return "";
+		}
+	}
+	//============================================================================================================
 
-if (isset($id_mess)) echo "<input type=\"submit\" value=\"Annuler\" style=\"font-variant: small-caps;\" name=\"cancel\" />\n";
+	$info_prof=civ_nom_prenom($_SESSION['login']);
 
-echo "</td></tr>\n";
+	echo "<div id='fixe'>".affiche_lien_edt_prof($_SESSION['login'], $info_prof)."</div>";
 
-echo "</table>\n";
-echo "</fieldset>\n";
-echo "</form></td></tr></table>\n";
+	$tab_creneaux=get_heures_debut_fin_creneaux();
 
-// Fin de la colonne de droite
+	// Total des propositions, remplacements et remplacements passés
+	$nb_propositions_ou_remplacements=0;
 
-echo "</td></tr></table>\n";
+	// Propositions en attente de réponse
+	$tab=get_tab_propositions_remplacements($_SESSION['login'], "en_attente");
+	if(count($tab)>0) {
+		$nb_propositions_ou_remplacements+=count($tab);
+		echo "
+<h3>Propositions de remplacement en attente d'une réponse de votre part</h3>
+
+<form action=\"".$_SERVER['PHP_SELF']."#debut_de_page\" method=\"post\" style=\"width: 100%; margin-left:3em;\">
+	<fieldset class='fieldset_opacite50'>
+		".add_token_field()."
+
+		<p class='bold'>".count($tab)." proposition(s) vous est(sont) soumise(s).<br />Une réponse serait bienvenue.</p>
+		<ul>";
+		$temoin_saisie_possible=0;
+		for($loop=0;$loop<count($tab);$loop++) {
+			/*
+			echo "<pre>";
+			print_r($tab[$loop]);
+			echo "</pre>";
+			*/
+
+			$nom_classe=get_nom_classe($tab[$loop]['id_classe']);
+			if(($tab[$loop]['id_groupe']!="")&&($tab[$loop]['id_groupe']!="0")) {
+				$info_groupe=get_info_grp($tab[$loop]['id_groupe'], array('description', 'matieres', 'classes', 'profs'));
+			}
+			else {
+				$info_groupe=get_info_aid($tab[$loop]['id_aid'], array('nom_general_complet', 'classes', 'profs'));
+			}
+
+
+			// Ne pas proposer de répondre à un remplacement déjà attribué
+			$attribue_a=check_proposition_remplacement_validee($tab[$loop]['id_absence'], $tab[$loop]['id_groupe'], $tab[$loop]['id_aid'], $tab[$loop]['id_classe'], $tab[$loop]['jour'], $tab[$loop]['id_creneau']);
+
+			if($attribue_a=="") {
+				echo "
+			<li>
+				<p style='margin-top:1em;'><strong>Le ".formate_date($tab[$loop]['date_debut_r'], "n", "complet")." en ".$tab_creneaux[$tab[$loop]['id_creneau']]['nom_creneau']." (<em>".$tab_creneaux[$tab[$loop]['id_creneau']]['debut_court']." à ".$tab_creneaux[$tab[$loop]['id_creneau']]['fin_court']."</em>)&nbsp;: $nom_classe</strong> (<em style='font-size:x-small;'>remplacement de $info_groupe</em>)</p>
+				<input type='radio' name='reponse_proposition[".$tab[$loop]['id']."]' id='reponse_proposition_".$tab[$loop]['id']."_oui' value='oui' onchange=\"checkbox_change('reponse_proposition_".$tab[$loop]['id']."_oui');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_non');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_vide')\" /><label for='reponse_proposition_".$tab[$loop]['id']."_oui' id='texte_reponse_proposition_".$tab[$loop]['id']."_oui'> Accepter la proposition</label><br />
+				<input type='radio' name='reponse_proposition[".$tab[$loop]['id']."]' id='reponse_proposition_".$tab[$loop]['id']."_non' value='non' onchange=\"checkbox_change('reponse_proposition_".$tab[$loop]['id']."_oui');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_non');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_vide')\" /><label for='reponse_proposition_".$tab[$loop]['id']."_non' id='texte_reponse_proposition_".$tab[$loop]['id']."_non'> Rejeter la proposition</label><br />
+				<input type='radio' name='reponse_proposition[".$tab[$loop]['id']."]' id='reponse_proposition_".$tab[$loop]['id']."_vide' value='' onchange=\"checkbox_change('reponse_proposition_".$tab[$loop]['id']."_oui');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_non');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_vide')\" checked /><label for='reponse_proposition_".$tab[$loop]['id']."_vide' id='texte_reponse_proposition_".$tab[$loop]['id']."_vide' style='font-weight:bold;'> Ne pas répondre pour le moment</label><br />
+				Commentaire&nbsp;: <textarea name='commentaire_proposition[".$tab[$loop]['id']."]' style='vertical-align:top;'></textarea>
+			</li>";
+				$temoin_saisie_possible++;
+			}
+			else {
+				echo "
+			<li>
+				<p style='color:grey; margin-top:1em; margin-bottom:1em;'><strong>Le ".formate_date($tab[$loop]['date_debut_r'], "n", "complet")." en ".$tab_creneaux[$tab[$loop]['id_creneau']]['nom_creneau']." (<em>".$tab_creneaux[$tab[$loop]['id_creneau']]['debut']." à ".$tab_creneaux[$tab[$loop]['id_creneau']]['fin']."</em>)&nbsp;: $nom_classe</strong> (<em style='font-size:x-small;'>remplacement de $info_groupe</em>)&nbsp:<br />Remplacement attribué à ".$attribue_a.".</p>
+			</li>";
+			}
+		}
+		echo "
+		</ul>
+
+		".(($temoin_saisie_possible>0) ? "<input type='hidden' name='is_posted' value='1' /><p><input type='submit' value='Valider' /></p>" : "")."
+
+		<p style='text-indent:-4em;margin-left:4em;margin-top:1em;'><em>NOTE&nbsp;:</em> Une fois que vous avez accepté une proposition, une validation de la part de l'Administration doit encore être faite.<br />
+		La proposition de remplacer un professeur sur un créneau peut en effet avoir été soumise à plusieurs professeurs.<br />
+		L'Administration choisira qui sera l'heureux élu;)</p>
+	</fieldset>
+</form>";
+	}
+
+
+	// Propositions (dans le futur) ayant reçu une réponse de la part du professeur
+	$tab=get_tab_propositions_remplacements($_SESSION['login'], "futures_avec_reponse");
+	if(count($tab)>0) {
+		$nb_propositions_ou_remplacements+=count($tab);
+		echo "
+<h3>Propositions de remplacement auxquelles vous avez répondu</h3>
+
+<form action=\"".$_SERVER['PHP_SELF']."#debut_de_page\" method=\"post\" style=\"width: 100%; margin-left:3em;\">
+	<fieldset class='fieldset_opacite50'>
+		".add_token_field()."
+
+		<p class='bold'>Vous avez répondu à la(aux) ".count($tab)." proposition(s) suivante(s).</p>
+		<ul>";
+		$temoin_saisie_possible=0;
+		for($loop=0;$loop<count($tab);$loop++) {
+			/*
+			echo "<pre>";
+			print_r($tab[$loop]);
+			echo "</pre>";
+			*/
+
+			$nom_classe=get_nom_classe($tab[$loop]['id_classe']);
+			if(($tab[$loop]['id_groupe']!="")&&($tab[$loop]['id_groupe']!="0")) {
+				$info_groupe=get_info_grp($tab[$loop]['id_groupe'], array('description', 'matieres', 'classes', 'profs'));
+			}
+			else {
+				$info_groupe=get_info_aid($tab[$loop]['id_aid'], array('nom_general_complet', 'classes', 'profs'));
+			}
+
+			// Ne pas proposer de répondre à un remplacement déjà attribué
+			$attribue_a=check_proposition_remplacement_validee($tab[$loop]['id_absence'], $tab[$loop]['id_groupe'], $tab[$loop]['id_aid'], $tab[$loop]['id_classe'], $tab[$loop]['jour'], $tab[$loop]['id_creneau']);
+
+			if($attribue_a=="") {
+				if($tab[$loop]['reponse']=='oui') {
+					$checked_oui=" checked";
+					$checked_non="";
+
+					$style_oui=" style='font-weight:bold;'";
+					$style_non="";
+				}
+				elseif($tab[$loop]['reponse']=='non') {
+					$checked_oui="";
+					$checked_non=" checked";
+
+					$style_oui="";
+					$style_non=" style='font-weight:bold;'";
+				}
+
+				echo "
+			<li>
+				<p><strong>Le ".formate_date($tab[$loop]['date_debut_r'], "n", "complet")." en ".$tab_creneaux[$tab[$loop]['id_creneau']]['nom_creneau']." (<em>".$tab_creneaux[$tab[$loop]['id_creneau']]['debut_court']." à ".$tab_creneaux[$tab[$loop]['id_creneau']]['fin_court']."</em>)&nbsp;: $nom_classe</strong> (<em style='font-size:x-small;'>remplacement de $info_groupe</em>)</p>
+				<input type='radio' name='reponse_proposition[".$tab[$loop]['id']."]' id='reponse_proposition_".$tab[$loop]['id']."_oui' value='oui' onchange=\"checkbox_change('reponse_proposition_".$tab[$loop]['id']."_oui');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_non');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_vide')\"$checked_oui /><label for='reponse_proposition_".$tab[$loop]['id']."_oui' id='texte_reponse_proposition_".$tab[$loop]['id']."_oui'$style_oui> Proposition acceptée</label><br />
+				<input type='radio' name='reponse_proposition[".$tab[$loop]['id']."]' id='reponse_proposition_".$tab[$loop]['id']."_non' value='non' onchange=\"checkbox_change('reponse_proposition_".$tab[$loop]['id']."_oui');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_non');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_vide')\"$checked_non /><label for='reponse_proposition_".$tab[$loop]['id']."_non' id='texte_reponse_proposition_".$tab[$loop]['id']."_non'$style_non> Proposition rejetée</label><br />
+				<input type='radio' name='reponse_proposition[".$tab[$loop]['id']."]' id='reponse_proposition_".$tab[$loop]['id']."_vide' value='' onchange=\"checkbox_change('reponse_proposition_".$tab[$loop]['id']."_oui');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_non');checkbox_change('reponse_proposition_".$tab[$loop]['id']."_vide')\" /><label for='reponse_proposition_".$tab[$loop]['id']."_vide' id='texte_reponse_proposition_".$tab[$loop]['id']."_vide'> Pas de réponse</label><br />
+				Commentaire&nbsp;: <textarea name='commentaire_proposition[".$tab[$loop]['id']."]' style='vertical-align:top;'>".$tab[$loop]['commentaire_prof']."</textarea>
+			</li>";
+				$temoin_saisie_possible++;
+			}
+			else {
+
+				echo "
+			<li>
+				<p style='color:grey; margin-top:1em; margin-bottom:1em;'><strong>Le ".formate_date($tab[$loop]['date_debut_r'], "n", "complet")." en ".$tab_creneaux[$tab[$loop]['id_creneau']]['nom_creneau']." (<em>".$tab_creneaux[$tab[$loop]['id_creneau']]['debut_court']." à ".$tab_creneaux[$tab[$loop]['id_creneau']]['fin_court']."</em>)&nbsp;: $nom_classe</strong> (<em style='font-size:x-small;'>remplacement de $info_groupe</em>)&nbsp:<br />Remplacement attribué à ".$attribue_a.".</p>
+			</li>";
+
+			}
+		}
+		echo "
+		</ul>
+
+		".(($temoin_saisie_possible>0) ? "<input type='hidden' name='is_posted' value='2' /><p><input type='submit' value='Valider' /></p>" : "")."
+
+		<p style='text-indent:-4em;margin-left:4em;margin-top:1em;'><em>NOTE&nbsp;:</em> Une fois que vous avez accepté une proposition, une validation de la part de l'Administration doit encore être faite.<br />
+		La proposition de remplacer un professeur sur un créneau peut en effet avoir été soumise à plusieurs professeurs.<br />
+		L'Administration choisira qui sera l'heureux élu;)</p>
+	</fieldset>
+</form>";
+	}
+
+	echo js_checkbox_change_style('checkbox_change', 'texte_', 'y', 0.5);
+
+	// Remplacements validés
+	$tab=get_tab_propositions_remplacements($_SESSION['login'], "futures_validees");
+	if(count($tab)>0) {
+		$nb_propositions_ou_remplacements+=count($tab);
+		echo "
+<h3>Remplacements (<em>à venir</em>) validés</h3>
+
+	<div class='fieldset_opacite50' style='margin-left:3em;'>
+
+		<p class='bold'>Le(s) remplacement(s) suivant(s) vous a(ont) été attribué(s)&nbsp;:</p>
+		<ul>";
+		for($loop=0;$loop<count($tab);$loop++) {
+			/*
+			echo "<pre>";
+			print_r($tab[$loop]);
+			echo "</pre>";
+			*/
+
+			$nom_classe=get_nom_classe($tab[$loop]['id_classe']);
+			if(($tab[$loop]['id_groupe']!="")&&($tab[$loop]['id_groupe']!="0")) {
+				$info_groupe=get_info_grp($tab[$loop]['id_groupe'], array('description', 'matieres', 'classes', 'profs'));
+			}
+			else {
+				$info_groupe=get_info_aid($tab[$loop]['id_aid'], array('nom_general_complet', 'classes', 'profs'));
+			}
+
+			$info_salle="";
+			if($tab[$loop]['salle']!="") {
+				$info_salle="<br />Salle ".$tab[$loop]['salle'];
+			}
+
+			$commentaire_validation="";
+			if($tab[$loop]['commentaire_validation']!="") {
+				$commentaire_validation="<br />".$tab[$loop]['commentaire_validation'];
+			}
+
+			echo "
+			<li>
+				<p><strong>Le ".formate_date($tab[$loop]['date_debut_r'], "n", "complet")." en ".$tab_creneaux[$tab[$loop]['id_creneau']]['nom_creneau']." (<em>".$tab_creneaux[$tab[$loop]['id_creneau']]['debut']." à ".$tab_creneaux[$tab[$loop]['id_creneau']]['fin']."</em>)&nbsp;: $nom_classe</strong> (<em style='font-size:x-small;'>remplacement de $info_groupe</em>)".$info_salle.$commentaire_validation."</p>
+			</li>";
+		}
+		echo "
+		</ul>
+	</div>";
+	}
+
+	// Remplacements validés/effectués dans le passé
+	$tab=get_tab_propositions_remplacements($_SESSION['login'], "validees_passees");
+	if(count($tab)>0) {
+		$nb_propositions_ou_remplacements+=count($tab);
+		echo "
+<h3>Remplacements validés/effectués dans le passé</h3>
+
+	<div class='fieldset_opacite50' style='margin-left:3em;'>
+
+		<p class='bold'>Le(s) remplacement(s) suivant(s) vous a(ont) été attribué(s)&nbsp;:</p>
+		<ul>";
+		for($loop=0;$loop<count($tab);$loop++) {
+			/*
+			echo "<pre>";
+			print_r($tab[$loop]);
+			echo "</pre>";
+			*/
+
+			$nom_classe=get_nom_classe($tab[$loop]['id_classe']);
+			if(($tab[$loop]['id_groupe']!="")&&($tab[$loop]['id_groupe']!="0")) {
+				$info_groupe=get_info_grp($tab[$loop]['id_groupe'], array('description', 'matieres', 'classes', 'profs'));
+			}
+			else {
+				$info_groupe=get_info_aid($tab[$loop]['id_aid'], array('nom_general_complet', 'classes', 'profs'));
+			}
+
+			$info_salle="";
+			if($tab[$loop]['salle']!="") {
+				$info_salle=" (<em>salle ".$tab[$loop]['salle']."</em>)";
+			}
+
+			$commentaire_validation="";
+			if($tab[$loop]['commentaire_validation']!="") {
+				$commentaire_validation="<br />".$tab[$loop]['commentaire_validation'];
+			}
+
+			echo "
+			<li>
+				<p><strong>Le ".formate_date($tab[$loop]['date_debut_r'], "n", "complet")." en ".$tab_creneaux[$tab[$loop]['id_creneau']]['nom_creneau']." (<em>".$tab_creneaux[$tab[$loop]['id_creneau']]['debut']." à ".$tab_creneaux[$tab[$loop]['id_creneau']]['fin']."</em>)&nbsp;: $nom_classe</strong>".$info_salle." (<em style='font-size:x-small;'>remplacement de $info_groupe</em>)".$commentaire_validation."</p>
+			</li>";
+		}
+		echo "
+		</ul>
+	</div>";
+	}
+
+	if($nb_propositions_ou_remplacements==0) {
+		echo "<p>Aucune proposition de remplacement ne vous a été faite.</p>";
+	}
+
+}
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+elseif($_SESSION['statut']=="eleve") {
+
+	echo "<p style='color:red'>L'information des élèves n'est pas encore implémentée.</p>";
+
+}
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+elseif($_SESSION['statut']=="responsable") {
+
+	echo "<p style='color:red'>L'information des responsables n'est pas encore implémentée.</p>";
+
+}
+
 require("../lib/footer.inc.php");
 ?>
