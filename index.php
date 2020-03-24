@@ -1,235 +1,174 @@
 <?php
-
 /*
-* Copyright 2001, 2018 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun, Stephane Boireau
-*
-* This file is part of GEPI.
-*
-* GEPI is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation; either version 2 of the License, or
-* (at your option) any later version.
-*
-* GEPI is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with GEPI; if not, write to the Free Software
-* Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
-
+ * Copyright 2001, 2016 Thomas Belliard, Laurent Delineau, Edouard Hue, Eric Lebrun, Stephane Boireau
+ *
+ * This file is part of GEPI.
+ *
+ * GEPI is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * GEPI is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GEPI; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
 // Initialisations files
 require_once("../lib/initialisations.inc.php");
 
-
 // Resume session
+
 $resultat_session = $session_gepi->security_check();
 if ($resultat_session == 'c') {
-	header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
-	die();
+    header("Location: ../utilisateurs/mon_compte.php?change_mdp=yes");
+    die();
+
 } else if ($resultat_session == '0') {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+    die();
 }
 
 
 if (!checkAccess()) {
-	header("Location: ../logout.php?auto=1");
-	die();
+    header("Location: ../logout.php?auto=1");
+    die();
 }
 
-// Initialisation
-$id_classe = isset($_POST['id_classe']) ? $_POST['id_classe'] : (isset($_GET['id_classe']) ? $_GET['id_classe'] : NULL);
+if (isset($_POST['sup'])) {
+  $call_data = sql_query("SELECT indice_aid FROM aid_config");
+  $sup_all = "";
+  $liste_cible = '';
+  for ($i=0; ($row=sql_row($call_data,$i)); $i++) {
+      $id = $row[0];
+      $temp = "sup".$id;
+      if (isset($_POST[$temp])) {
 
-//debug_var();
-if((isset($id_classe))&&(!preg_match('/^[0-9]{1,}$/', $id_classe))) {
-	$msg="Classe non choisie ou choix invalide.<br />";
-	unset($id_classe);
+        $test = sql_count(sql_query("SELECT indice_aid FROM aid WHERE indice_aid='".$id."'"));
+        if ($test != 0) {
+           $sup_all = 'no';
+        } else {
+           $liste_cible = $liste_cible.$id.";";
+        }
+      }
+  }
+  $_SESSION['chemin_retour'] = $_SERVER['REQUEST_URI']."?sup_all=".$sup_all;
+  header("Location: ../lib/confirm_query.php?liste_cible=$liste_cible&action=del_type_aid".add_token_in_url(false));
+
 }
+  if (isset($_GET['sup_all'])) $sup_all = $_GET['sup_all']; else $sup_all = '';
 
-//include "../lib/periodes.inc.php";
-//**************** EN-TETE *****************
-$titre_page = "Saisie des absences";
+  if ($sup_all=='no') $msg = "Une ou plusieurs catégories aid n'ont pas pu être supprimées car elles contiennent des aid.";
+
+//**************** EN-TETE *********************
+$titre_page = "Gestion des AID";
+if (!suivi_ariane($_SERVER['PHP_SELF'] ,$titre_page))
+		echo "erreur lors de la création du fil d'ariane";
 require_once("../lib/header.inc.php");
 //**************** FIN EN-TETE *****************
 
-// Tableau pour les autorisations exceptionnelles de saisie
-$tab_autorisation_exceptionnelle_de_saisie=array();
-$date_courante=time();
-//echo "\$date_courante=$date_courante<br />";
-$sql="SELECT * FROM abs_bull_delais WHERE UNIX_TIMESTAMP(date_limite)>'".time()."';";
-$res=mysqli_query($GLOBALS["mysqli"], $sql);
-if(mysqli_num_rows($res)>0) {
-	while ($lig=mysqli_fetch_object($res)) {
-		$tab_autorisation_exceptionnelle_de_saisie[$lig->id_classe][$lig->periode]['totaux']=$lig->totaux;
-		$tab_autorisation_exceptionnelle_de_saisie[$lig->id_classe][$lig->periode]['appreciation']=$lig->appreciation;
-	}
-}
-
-if (!isset($id_classe)) {
-	echo "<p class=bold><a href='../accueil.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour</a>";
-	echo " | <a href='import_absences_sconet.php'>Importer les absences de Sconet par lots</a>\n";
-	echo " | <a href='import_absences_csv.php'>Importer les absences depuis un CSV par lots</a>\n";
-	echo "</p>\n";
-
-	if ((($_SESSION['statut']=="cpe")&&(getSettingValue('GepiAccesAbsTouteClasseCpe')=='yes'))||($_SESSION['statut']!="cpe")) {
-		$sql="SELECT DISTINCT c.* FROM classes c, periodes p WHERE p.id_classe = c.id  ORDER BY classe;";
-	} else {
-		$sql="SELECT DISTINCT c.* FROM classes c, j_eleves_cpe e, j_eleves_classes jc WHERE (e.cpe_login = '".$_SESSION['login']."' AND jc.login = e.e_login AND c.id = jc.id_classe)  ORDER BY classe;";
-	}
-	$calldata = mysqli_query($GLOBALS["mysqli"], $sql);
-	$nombreligne = mysqli_num_rows($calldata);
-
-	echo "<p>Total : $nombreligne classe";
-	if($nombreligne>1){echo "s";}
-	echo " - ";
-	echo "Cliquez sur la classe pour laquelle vous souhaitez saisir les absences :</p>\n";
-	if (!getSettingAOui('GepiAccesAbsTouteClasseCpe')) {
-		echo "<p>Remarque : s'affichent toutes les classes pour lesquelles vous êtes responsable du suivi d'au moins un ".$gepiSettings['denomination_eleve']." de la classe.</p>\n";
-	}
-
-	/*
-	$i = 0;
-	while ($i < $nombreligne){
-		$id_classe = old_mysql_result($calldata, $i, "id");
-		$classe_liste = old_mysql_result($calldata, $i, "classe");
-		echo "<br /><a href='index.php?id_classe=$id_classe'>$classe_liste</a>\n";
-		$i++;
-
-	}
-	*/
-
-	$i = 0;
-	unset($tab_lien);
-	unset($tab_txt);
-	$tab_txt=array();
-	$tab_lien=array();
-	while ($lig=mysqli_fetch_object($calldata)) {
-		$tab_lien[$i] = "index.php?id_classe=".$lig->id;
-		$tab_txt[$i] = $lig->classe;
-		$i++;
-	}
-	tab_liste($tab_txt,$tab_lien,3);
-
-
-
-	echo "<br />\n";
-} else {
-	include "../lib/periodes.inc.php";
-
-	// On choisit la période :
-	echo "<p class=bold><a href='index.php'><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Choisir une autre classe</a>";
-
-	echo " | <a href='import_absences_sconet.php'>Importer les absences de Sconet par lots</a>\n";
-
-	echo " | <a href='import_absences_csv.php'>Importer les absences depuis un CSV par lots</a>\n";
-
-	echo "</p>\n";
-
-	$call_classe = mysqli_query($GLOBALS["mysqli"], "SELECT classe FROM classes WHERE id = '$id_classe'");
-	$classe = old_mysql_result($call_classe, "0", "classe");
-	echo "<h2>Classe de ".$classe."</h2>\n";
-	echo "<p><b>Saisie manuelle - Choisissez la période : </b></p>\n";
-	//echo "<ul>\n";
-	$i="1";
-	echo "<table class='boireaus' cellpadding='3'>\n";
-
-	// si le module de gestion des absences est activé alors on ajout un colspan de 2 pour l'entêt d'importation
-	$colspan = '3';
-	if ( getSettingValue("active_module_absence") === 'y' || getSettingValue("abs2_import_manuel_bulletin")==='y') {
-		$colspan = '4';
-	}
-
-	echo "<tr><th>Période</th><th style='width:6em;'>Saisir</th><th style='width:6em;'>Consulter</th><th colspan='$colspan'>Importer les absences</th></tr>\n";
-	$alt=1;
-	while ($i < $nb_periode) {
-		$alt=$alt*(-1);
-		echo "<tr class='lig$alt'>\n";
-		echo "<th>".ucfirst($nom_periode[$i])."</th>\n";
-		if(($ver_periode[$i] == "N")||
-		 (($ver_periode[$i]!="O")&&($_SESSION['statut']=='secours'))) {
-		  echo "<td><a href='saisie_absences.php?id_classe=$id_classe&amp;periode_num=$i'><img src='../images/edit16.png' width='16' height='16' alt='Saisir' title='Saisir' /></a></td>\n";
-		  //echo "<td><a href='saisir_groupe.php?id_classe=$id_classe&amp;periode_num=$i'><img src='../images/edit16.png' width='16' height='16' alt='Saisir' title='Saisir' /></a></td>\n";
-		}
-		elseif(((isset($tab_autorisation_exceptionnelle_de_saisie[$id_classe][$i]['totaux']))&&($tab_autorisation_exceptionnelle_de_saisie[$id_classe][$i]['totaux']=='y'))||
-		((isset($tab_autorisation_exceptionnelle_de_saisie[$id_classe][$i]['appreciation']))&&($tab_autorisation_exceptionnelle_de_saisie[$id_classe][$i]['appreciation']=='y'))) {
-			echo "<td title=\"Autorisation exceptionnelle de saisie.\" style='background-color:orange'><a href='saisie_absences.php?id_classe=$id_classe&amp;periode_num=$i'><img src='../images/edit16.png' width='16' height='16' alt='Saisir' title='Saisir' /></a></td>\n";
-		}
-		else {
-			echo "<td style='color:red;'><img src='../images/disabled.png' width='20' height='20' alt='".$gepiClosedPeriodLabel."' title='".$gepiClosedPeriodLabel."' /></td>\n";
-		}
-		echo "<td><a href='consulter_absences.php?id_classe=$id_classe&amp;periode_num=$i'><img src='../images/icons/chercher.png' width='16' height='16' alt='Consulter' title='Consulter' /></a></td>\n";
-
-		if(($ver_periode[$i] == "N")||
-		 (($ver_periode[$i]!="O")&&($_SESSION['statut']=='secours'))) {
-			echo "<td style='width:5em;'><a href='import_absences_gep.php?id_classe=$id_classe&amp;periode_num=$i'>de GEP</a></td>\n";
-		} else {
-			echo "<td style='color:red;' colspan='$colspan'><img src='../images/disabled.png' width='20' height='20' alt='".$gepiClosedPeriodLabel."' title='".$gepiClosedPeriodLabel."' /></td>\n";
-		}
-
-	    // si le module de gestion des absences de gepi est activé alors on propose l'importation des absences de ce module
-	    if ( getSettingValue("active_module_absence") === 'y' || getSettingValue("abs2_import_manuel_bulletin")==='y' ) {
-			if(($ver_periode[$i] == "N")||
-			(($ver_periode[$i]!="O")&&($_SESSION['statut']=='secours'))) {
-				echo "<td style='width:5em;'><a href='import_absences_gepi.php?id_classe=$id_classe&amp;periode_num=$i'>de GEPI</a></td>\n";
-			}
-			/*
-			else {
-				echo "<td style='color:red;'>".$gepiClosedPeriodLabel."</td>\n";
-			}
-			*/
-	    }
-
-		if(($ver_periode[$i] == "N")||
-		 (($ver_periode[$i]!="O")&&($_SESSION['statut']=='secours'))) {
-			echo "<td style='width:5em;'><a href='import_absences_sconet.php?id_classe=$id_classe&amp;num_periode=$i'>de Sconet</a></td>\n";
-
-			echo "<td style='width:5em;'><a href='import_absences_csv.php?id_classe=$id_classe&amp;num_periode=$i'>depuis un CSV</a></td>\n";
-		}
-		/*
-		else {
-			echo "<td style='color:red;'>".$gepiClosedPeriodLabel."</td>\n";
-		}
-		*/
-		$i++;
-	}
-	echo "</table>\n";
-	//echo "</ul>\n";
-
-	echo "<p><br /></p>\n";
-
-	echo "<p><i>NOTES:</i></p>\n";
-	echo "<ul>\n";
-	echo "<li><p>Pour l'importation des absences depuis GEP, les fichiers F_EABS.DBF et F_NOMA.DBF de la base GEP sont requis.</p></li>\n";
-	echo "<li><p>Pour l'importation des absences depuis Sconet, le fichier ExportAbsences.xml de Sconet est requis.</p></li>\n";
-	echo "</ul>\n";
-
-	/*
-	$i="1";
-	// On propose l'importation à partir d'un fichier GEP
-	while ($i < $nb_periode) {
-		if ($ver_periode[$i] == "N") {
-			echo "<p class='bold'>".ucfirst($nom_periode[$i])." - Importation à partir du fichier F_EABS.DBF de la base GEP (fichier F_NOMA.DBF également requis) :</p>\n";
-			echo "<ul><li><a href='import_absences_gep.php?id_classe=$id_classe&amp;periode_num=$i'>Importer les absences à partir du fichier F_EABS.DBF</a></li></ul>\n";
-		}
-		$i++;
-	}
-	*/
-
-
-	/*
-	$i="1";
-	// On propose l'importation à partir d'un fichier GEP
-	while ($i < $nb_periode) {
-		if ($ver_periode[$i] == "N") {
-			echo "<p class='bold'>".ucfirst($nom_periode[$i])." - Importation à partir du fichier <b>exportAbsences.xml</b> de <b>Sconet</b> :</p>\n";
-			echo "<ul><li><a href='import_absences_sconet.php?id_classe=$id_classe&amp;periode_num=$i'>Importer les absences à partir du fichier exportAbsences.xml</a></li></ul>\n";
-		}
-		$i++;
-	}
-	*/
-}
-require "../lib/footer.inc.php";
 ?>
+<p class="bold" style="margin-top: .5em;">
+	<!-- <a href="../accueil_admin.php"><img src='../images/icons/back.png' alt='Retour' class='back_link'/> Retour </a> -->
+	<!-- | -->
+	<a href="config_aid.php?mode=ajout">Ajouter une catégorie d'AID</a>
+	<!-- | -->
+
+<?php
+$test_outils_comp = sql_query1("select count(outils_complementaires) from aid_config where outils_complementaires='y'");
+if ($test_outils_comp != 0) {
+?>
+	|
+	<a href="config_aid_fiches_projet.php">Configurer les fiches projet</a>
+<?php
+}
+
+$sql="SELECT 1=1 FROM j_groupes_types jgt, groupes_types gt WHERE gt.id=jgt.id_type LIMIT 1;";
+$test=mysqli_query($GLOBALS["mysqli"], $sql);
+if(mysqli_num_rows($test)>0) {
+	echo " | <a href='transfert_groupe_aid.php'>Transfert/migration Groupe-&gt;AID</a>";
+}
+?>
+</p>
+<!-- <p class="medium"> -->
+<?php
+
+$call_data = mysqli_query($GLOBALS["mysqli"], "SELECT * FROM aid_config ORDER BY order_display1, order_display2, nom");
+$nb_aid = mysqli_num_rows($call_data);
+if ($nb_aid == 0) {
+?>
+<p class='grand'>Il n'y a actuellement aucune catégorie d'AID</p>
+<?php
+} else {
+?>
+<form action="index.php" name="formulaire" method="post">
+	<table class='boireaus'>
+		<caption class="invisible">Catégories d'AID</caption>
+		<tr>
+			<th>Nom - Modifications</th>
+			<th>Liste des aid de la catégorie</th>
+			<th>Nom complet de l'AID</th>
+			<th><input type="submit" name="sup" value="Supprimer" /></th>
+		</tr>
+<?php
+
+	$i=0;
+	$alt=1;
+	while ($i < $nb_aid) {
+		$nom_aid = @old_mysql_result($call_data, $i, "nom");
+		$nom_complet_aid = @old_mysql_result($call_data, $i, "nom_complet");
+		$indice_aid = @old_mysql_result($call_data, $i, "indice_aid");
+		$outils_complementaires  = @old_mysql_result($call_data, $i, "outils_complementaires");
+		if ($outils_complementaires=='y') {
+			$display_outils = "<br /><span class='small'>(Outils complémentaires activés)</span>";
+		} else {
+			$display_outils="";
+		}
+
+		if ((getSettingValue("num_aid_trombinoscopes")==$indice_aid) and (getSettingValue("active_module_trombinoscopes")=='y')) {
+			$display_trombino = "<br /><span class='small'>(Gestion des accès élèves au trombinoscope)</span>";
+		} else {
+			$display_trombino="";
+		}
+
+		$sql="SELECT 1=1 FROM aid WHERE indice_aid = '$indice_aid';";
+		$res=mysqli_query($mysqli, $sql);
+		if(mysqli_num_rows($res)==0) {
+			$title_tr=" title=\"Aucun AID n'est créé dans la catégorie.\"";
+			$style_tr=" style='background-color:grey'";
+		}
+		else {
+			$title_tr="";
+			$style_tr="";
+		}
+
+		$alt=$alt*(-1);
+?>
+		<tr class='lig<?php echo $alt; ?>'<?php echo $title_tr.$style_tr;?>>
+			<td>
+				<a href='config_aid.php?indice_aid=<?php echo $indice_aid; ?>'><?php echo $nom_aid; ?> <img src='../images/edit16.png' class='icone16' alt='Éditer' /></a><br /><span style='font-size:x-small'><?php echo $nom_complet_aid;?></span>
+				<?php echo $display_outils; ?> <?php echo $display_trombino; ?>
+			</td>
+			<td>
+				<a href='index2.php?indice_aid=<?php echo $indice_aid; ?>'>Liste des aid de la catégorie <img src='../images/icons/chercher.png' class='icone16' alt='Éditer' /></a>
+			</td>
+			<td>
+				<?php echo $nom_complet_aid; ?>
+			</td>
+			<td class="center">
+				<input type="checkbox" name="sup<?php echo $indice_aid; ?>" />
+			</td>
+		</tr>
+<?php
+        $i++;
+    }
+?>
+	</table>
+</form>
+<?php
+}
+require("../lib/footer.inc.php");
